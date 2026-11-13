@@ -12,6 +12,7 @@
 
 #include "VkInitializer.h"
 #include "VkTypes.h"
+#include "VkImages.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -27,10 +28,13 @@ namespace ephemeral
     {
         VkCommandPool cmdPool;
         VkCommandBuffer mainCmdBuffer;
+        VkSemaphore swapChainSemaphore, renderSemaphore;
+        // TODO: Special note, watch on the semaphore count.
+        VkFence renderFence;
     };
 
 
-    // Main Engine Context(PIMPL used to remove header leakage)
+    // Main Engine Context(Used to remove header leakage)
     struct EphemeralEngineContext
     {
         // ------------------------ VULKAN INSTANCE ------------------------
@@ -94,7 +98,13 @@ namespace ephemeral
             vkDeviceWaitIdle(_ctx->device);
             for (const auto& frame : _ctx->frames)
             {
+                // Destroy Command Pool
                 vkDestroyCommandPool(_ctx->device, frame.cmdPool, _ctx->allocator);
+
+                // Destroy Sync Objects
+                vkDestroyFence(_ctx->device, frame.renderFence, _ctx->allocator);
+                vkDestroySemaphore(_ctx->device, frame.swapChainSemaphore, _ctx->allocator);
+                vkDestroySemaphore(_ctx->device, frame.swapChainSemaphore, _ctx->allocator);
             }
             destroySwapChain();
             vkDestroySurfaceKHR(_ctx->instance, _ctx->surface, _ctx->allocator);
@@ -118,7 +128,77 @@ namespace ephemeral
 
     void EphemeralEngine::draw()
     {
-        // nothing yet
+        // ------------------------ WAITING & SWAP CHAIN IMAGE ACQUISITION ------------------------
+        constexpr auto TIMEOUT = std::numeric_limits<uint32_t>::max();
+        // Wait for previous frame to finish
+        VK_CHECK(vkWaitForFences(_ctx->device, 1, &currentFrame().renderFence, true, TIMEOUT));
+        VK_CHECK(vkResetFences(_ctx->device, 1, &currentFrame().renderFence));
+
+        // Request an image from the swapchain
+        uint32_t swapChainImageIdx;
+        VK_CHECK(
+            vkAcquireNextImageKHR(_ctx->device, _ctx->swapChain, TIMEOUT, currentFrame().swapChainSemaphore, nullptr, &
+                swapChainImageIdx));
+
+
+        // ------------------------ COMMAND BUFFER RECORDING ------------------------
+        // Reset the command buffer and begin recording the commands
+        const VkCommandBuffer cmdBuffer = currentFrame().mainCmdBuffer;
+        VK_CHECK(vkResetCommandBuffer(cmdBuffer, 0));
+
+        // We will reset the command buffer every time after submission
+        const VkCommandBufferBeginInfo cmdBeginInfo = vkutils::commandBufferBeginInfo(
+            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+        VK_CHECK(vkBeginCommandBuffer(cmdBuffer, &cmdBeginInfo));
+
+
+        // Transition the swap chain image to a writeable layout
+        vkutils::transitionImage(cmdBuffer, _ctx->swapChainImages[swapChainImageIdx], VK_IMAGE_LAYOUT_UNDEFINED,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        // Flashing Background color
+        const float flash = std::abs(std::sin(_frameNumber / 120.f));
+        const VkClearColorValue clearValue{ flash, flash, 0.0f, 1.0f };
+        const VkImageSubresourceRange clearRange = vkutils::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+
+        // Clear the color
+        vkCmdClearColorImage(cmdBuffer, _ctx->swapChainImages[swapChainImageIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             &clearValue, 1, &clearRange);
+        // Transition layout optimal for presentation
+        vkutils::transitionImage(cmdBuffer, _ctx->swapChainImages[swapChainImageIdx],
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        // End recording
+        vkEndCommandBuffer(cmdBuffer);
+
+
+        // ------------------------ QUEUE SUBMISSION ------------------------
+        VkCommandBufferSubmitInfo cmdBufferSubmitInfo = vkutils::commandBufferSubmitInfo(cmdBuffer);
+
+        VkSemaphoreSubmitInfo waitSemaphoreInfo = vkutils::semaphoreSubmitInfo(
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, currentFrame().swapChainSemaphore);
+        VkSemaphoreSubmitInfo renderSemaphoreInfo = vkutils::semaphoreSubmitInfo(
+            VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, currentFrame().renderSemaphore);
+
+        const VkSubmitInfo2 submitInfo = vkutils::submitInfo(&cmdBufferSubmitInfo, &waitSemaphoreInfo,
+                                                             &renderSemaphoreInfo);
+
+        VK_CHECK(vkQueueSubmit2(_ctx->graphicsQueue, 1, &submitInfo, currentFrame().renderFence));
+
+
+        // ------------------------ PRESENTATION ------------------------
+        const VkPresentInfoKHR presentInfo{
+            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .pNext = nullptr,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &currentFrame().renderSemaphore,
+            .swapchainCount = 1,
+            .pSwapchains = &_ctx->swapChain,
+            .pImageIndices = &swapChainImageIdx
+        };
+        VK_CHECK(vkQueuePresentKHR(_ctx->graphicsQueue, &presentInfo));
+
+        // Increment the frame number
+        ++_frameNumber;
     }
 
 
@@ -230,7 +310,23 @@ namespace ephemeral
     }
 
 
-    void EphemeralEngine::initSyncStructures() noexcept {}
+    void EphemeralEngine::initSyncStructures() noexcept
+    {
+        // We need to create the fence in signaled state.
+        const VkFenceCreateInfo fenceCreateInfo         = vkutils::fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
+        const VkSemaphoreCreateInfo semaphoreCreateInfo = vkutils::semaphoreCreateInfo();
+
+        for (size_t i = 0; i < FRAME_OVERLAP; ++i)
+        {
+            VK_CHECK(vkCreateFence(_ctx->device, &fenceCreateInfo, _ctx->allocator, &_ctx->frames[i].renderFence));
+            VK_CHECK(
+                vkCreateSemaphore(_ctx->device, &semaphoreCreateInfo, _ctx->allocator, &_ctx->frames[i].
+                    swapChainSemaphore));
+            VK_CHECK(
+                vkCreateSemaphore(_ctx->device, &semaphoreCreateInfo, _ctx->allocator, &_ctx->frames[i].renderSemaphore
+                ));
+        }
+    }
 
 
     void EphemeralEngine::createSwapChain(const uint32_t width, const uint32_t height) noexcept
