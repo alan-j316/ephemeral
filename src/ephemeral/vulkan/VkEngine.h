@@ -39,7 +39,7 @@ namespace ephemeral
         // Config variables
         static constexpr auto ENGINE_NAME               = "Ephemeral";
         static constexpr bool VALIDATION_LAYERS_ENABLED = true;
-        static constexpr size_t FRAME_OVERLAP    = 2;
+        static constexpr size_t FRAME_OVERLAP           = 1; // Double buffering
 
     protected:
         bool _isInitialized{ false };

@@ -28,9 +28,6 @@ namespace ephemeral
     {
         VkCommandPool cmdPool;
         VkCommandBuffer mainCmdBuffer;
-        VkSemaphore swapChainSemaphore, renderSemaphore;
-        // TODO: Special note, watch on the semaphore count.
-        VkFence renderFence;
     };
 
 
@@ -56,6 +53,12 @@ namespace ephemeral
         FrameData frames[EphemeralEngine::FRAME_OVERLAP];
         VkQueue graphicsQueue;
         uint32_t graphicsQueueFamily;
+
+        // ------------------------ SYNCHRONIZATION PRIMITIVES ------------------------
+        std::array<VkSemaphore, EphemeralEngine::FRAME_OVERLAP> swapChainSemaphores;
+        // NOTE: Number of render semaphores must match the number of swap chain images, not frame in flight
+        std::vector<VkSemaphore> renderSemaphores;
+        std::array<VkFence, EphemeralEngine::FRAME_OVERLAP> renderFences;
     };
 
 
@@ -100,12 +103,20 @@ namespace ephemeral
             {
                 // Destroy Command Pool
                 vkDestroyCommandPool(_ctx->device, frame.cmdPool, _ctx->allocator);
-
-                // Destroy Sync Objects
-                vkDestroyFence(_ctx->device, frame.renderFence, _ctx->allocator);
-                vkDestroySemaphore(_ctx->device, frame.swapChainSemaphore, _ctx->allocator);
-                vkDestroySemaphore(_ctx->device, frame.swapChainSemaphore, _ctx->allocator);
             }
+
+            // Destroy Sync Objects
+            for (size_t i = 0; i < FRAME_OVERLAP; ++i)
+            {
+                vkDestroyFence(_ctx->device, _ctx->renderFences[i], _ctx->allocator);
+
+                vkDestroySemaphore(_ctx->device, _ctx->swapChainSemaphores[i], _ctx->allocator);
+            }
+            for (const auto renderSemaphore : _ctx->renderSemaphores)
+            {
+                vkDestroySemaphore(_ctx->device, renderSemaphore, _ctx->allocator);
+            }
+
             destroySwapChain();
             vkDestroySurfaceKHR(_ctx->instance, _ctx->surface, _ctx->allocator);
             vkDestroyDevice(_ctx->device, _ctx->allocator);
@@ -129,16 +140,21 @@ namespace ephemeral
     void EphemeralEngine::draw()
     {
         // ------------------------ WAITING & SWAP CHAIN IMAGE ACQUISITION ------------------------
-        constexpr auto TIMEOUT = std::numeric_limits<uint32_t>::max();
+        constexpr auto TIMEOUT        = std::numeric_limits<uint32_t>::max();
+        const auto curFence           = _ctx->renderFences[_frameNumber % FRAME_OVERLAP];
+        const auto swapChainSemaphore = _ctx->swapChainSemaphores[_frameNumber % FRAME_OVERLAP];
+
         // Wait for previous frame to finish
-        VK_CHECK(vkWaitForFences(_ctx->device, 1, &currentFrame().renderFence, true, TIMEOUT));
-        VK_CHECK(vkResetFences(_ctx->device, 1, &currentFrame().renderFence));
+        VK_CHECK(vkWaitForFences(_ctx->device, 1, &curFence, true, TIMEOUT));
+        VK_CHECK(vkResetFences(_ctx->device, 1, &curFence));
 
         // Request an image from the swapchain
         uint32_t swapChainImageIdx;
         VK_CHECK(
-            vkAcquireNextImageKHR(_ctx->device, _ctx->swapChain, TIMEOUT, currentFrame().swapChainSemaphore, nullptr, &
+            vkAcquireNextImageKHR(_ctx->device, _ctx->swapChain, TIMEOUT, swapChainSemaphore, nullptr, &
                 swapChainImageIdx));
+        // NOTE: Render semaphore must be sync with the image not frame index.
+        const auto renderSemaphore = _ctx->renderSemaphores[swapChainImageIdx];
 
 
         // ------------------------ COMMAND BUFFER RECORDING ------------------------
@@ -175,14 +191,14 @@ namespace ephemeral
         VkCommandBufferSubmitInfo cmdBufferSubmitInfo = vkutils::commandBufferSubmitInfo(cmdBuffer);
 
         VkSemaphoreSubmitInfo waitSemaphoreInfo = vkutils::semaphoreSubmitInfo(
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, currentFrame().swapChainSemaphore);
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, swapChainSemaphore);
         VkSemaphoreSubmitInfo renderSemaphoreInfo = vkutils::semaphoreSubmitInfo(
-            VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, currentFrame().renderSemaphore);
+            VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, renderSemaphore);
 
-        const VkSubmitInfo2 submitInfo = vkutils::submitInfo(&cmdBufferSubmitInfo, &waitSemaphoreInfo,
-                                                             &renderSemaphoreInfo);
+        const VkSubmitInfo2 submitInfo = vkutils::submitInfo(&cmdBufferSubmitInfo, &renderSemaphoreInfo,
+                                                             &waitSemaphoreInfo);
 
-        VK_CHECK(vkQueueSubmit2(_ctx->graphicsQueue, 1, &submitInfo, currentFrame().renderFence));
+        VK_CHECK(vkQueueSubmit2(_ctx->graphicsQueue, 1, &submitInfo, curFence));
 
 
         // ------------------------ PRESENTATION ------------------------
@@ -190,7 +206,7 @@ namespace ephemeral
             .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .pNext = nullptr,
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &currentFrame().renderSemaphore,
+            .pWaitSemaphores = &renderSemaphore,
             .swapchainCount = 1,
             .pSwapchains = &_ctx->swapChain,
             .pImageIndices = &swapChainImageIdx
@@ -318,12 +334,15 @@ namespace ephemeral
 
         for (size_t i = 0; i < FRAME_OVERLAP; ++i)
         {
-            VK_CHECK(vkCreateFence(_ctx->device, &fenceCreateInfo, _ctx->allocator, &_ctx->frames[i].renderFence));
+            VK_CHECK(vkCreateFence(_ctx->device, &fenceCreateInfo, _ctx->allocator, &_ctx->renderFences[i]));
             VK_CHECK(
-                vkCreateSemaphore(_ctx->device, &semaphoreCreateInfo, _ctx->allocator, &_ctx->frames[i].
-                    swapChainSemaphore));
+                vkCreateSemaphore(_ctx->device, &semaphoreCreateInfo, _ctx->allocator, &_ctx-> swapChainSemaphores[i]));
+        }
+        _ctx->renderSemaphores.resize(_ctx->swapChainImages.size());
+        for (size_t i = 0; i < _ctx->swapChainImages.size(); ++i)
+        {
             VK_CHECK(
-                vkCreateSemaphore(_ctx->device, &semaphoreCreateInfo, _ctx->allocator, &_ctx->frames[i].renderSemaphore
+                vkCreateSemaphore(_ctx->device, &semaphoreCreateInfo, _ctx->allocator, &_ctx->renderSemaphores[i]
                 ));
         }
     }
