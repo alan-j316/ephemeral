@@ -1,26 +1,109 @@
-include_guard()
-
 include(FetchContent)
 
+set(SDL_SHARED OFF CACHE BOOL "Build shared library" FORCE)
+set(SDL_STATIC ON CACHE BOOL "Build static library" FORCE)
+
+
 FetchContent_Declare(
-    googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG 52eb8108c5bdec04579160ae17225d66034bd723 # release-1.17.0
-    SYSTEM
+        sdl3
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG bd7c9e467bed6ec5103925fc1fb0a9e3703d6e54
+        SYSTEM
 )
 
 FetchContent_Declare(
-    googlebenchmark
-    GIT_REPOSITORY https://github.com/google/benchmark.git
-    GIT_TAG v1.9.5
-    SYSTEM
+        Falcon
+        GIT_REPOSITORY https://github.com/alan-j316/falcon-game-math.git
+        GIT_TAG 31f71c916be699922e462ccf2f144ca0a9d27148
+        SYSTEM
 )
+
+# https://stackoverflow.com/questions/69144529/vulkan-hpp-with-cmake
+# Declare required Vulkan version
+set(VULKAN_VER_MAJOR 1)
+set(VULKAN_VER_MINOR 4)
+set(VULKAN_VER_PATCH 358)
+set(VULKAN_VERSION ${VULKAN_VER_MAJOR}.${VULKAN_VER_MINOR}.${VULKAN_VER_PATCH})
+
+#-------------------------------------------------------------------------
+# Fetch Vulkan C Headers
+# ------------------------------------------------------------------------
+message(STATUS "Include Vulkan C Headers")
+FetchContent_Declare(
+        VulkanHeaders
+        GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+        GIT_TAG v${VULKAN_VERSION}
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+)
+set(PROJECT_IS_TOP_LEVEL OFF)
+FetchContent_MakeAvailable(VulkanHeaders) # vulkanheaders has a proper CMakeLists
+
+#-------------------------------------------------------------------------
+# Fetch Vulkan C++ Headers
+#-------------------------------------------------------------------------
+message(STATUS "Include Vulkan C++ Headers")
+FetchContent_Declare(
+        VulkanHPP
+        GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Hpp.git
+        GIT_TAG v${VULKAN_VERSION}
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+)
+
+#-------------------------------------------------------------------------
+# Fetch Vulkan Memory Allocator(VMA) Headers
+#-------------------------------------------------------------------------
+message(STATUS "Download and including VMA")
+FetchContent_Declare(
+        VulkanMemoryAllocator
+        GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+        GIT_TAG v3.5.0
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+)
+
+#------------------------------------------------------------------------
+# Fetch STB Headers
+#------------------------------------------------------------------------
+message(STATUS "Include STB Headers")
+FetchContent_Declare(
+        stb
+        GIT_REPOSITORY https://github.com/nothings/stb.git
+        GIT_TAG master
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+)
+
+#-------------------------------------------------------------------------
+# Fetch FastGLTF Headers
+#-------------------------------------------------------------------------
+message(STATUS "Download and including FastGLTF")
+FetchContent_Declare(
+        FastGLTF
+        GIT_REPOSITORY https://github.com/spnda/fastgltf.git
+        GIT_TAG v1.0.0
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+)
+
+
+# vulkanhpp does not have a proper CMakeLists
+# FetchContent_GetProperties(VulkanHPP)
+# FetchContent_Populate(VulkanHPP)
+FetchContent_MakeAvailable(VulkanHPP)
+FetchContent_MakeAvailable(VulkanMemoryAllocator)
+FetchContent_MakeAvailable(FastGLTF)
+FetchContent_MakeAvailable(Falcon)
 
 set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE) # Disables google benchmark from creating its own test suite
 
-FetchContent_MakeAvailable(googletest)
-FetchContent_MakeAvailable(googlebenchmark)
+FetchContent_MakeAvailable(sdl3)
+FetchContent_MakeAvailable(stb)
 
-# Group the projects into a single folder
-set_target_properties(gtest gtest_main gmock gmock_main PROPERTIES FOLDER "Google Test")
-set_target_properties(benchmark benchmark_main PROPERTIES FOLDER "Google Benchmark")
+add_library(stb INTERFACE
+        ${stb_SOURCE_DIR}/stb_image.h
+        # Add the sources for stb here as necessary
+)
+add_library(std::stb ALIAS stb)
+target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})

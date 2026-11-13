@@ -1,9 +1,8 @@
 [![Unit Tests](https://github.com/alanabrahampkochumon-zqict/CPP_Project_Template/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/alanabrahampkochumon-zqict/CPP_Project_Template/actions/workflows/unit-tests.yml)
 
-# Modern C++ Project Template
+# Ephemeral: Simple Vulkan Renderer
 
-A high-performance boilerplate for C++ development featuring CMake integration, Google Test (GTest) for unit testing,
-and Google Benchmark for performance analysis.
+A simple vulkan renderer based on vkguide.dev
 
 # Prerequisites
 
@@ -14,8 +13,8 @@ Ensure the following tools are installed and available in your system PATH:
 - <a href="https://git-scm.com/install/windows" target="_blank">Git</a>: Required for FetchContent dependency
   management.
 
-- <a href="https://git-scm.com/install/windows" target="_blank">Doxygen(Doxywizard)</a> (Optional): Required to generate
-  HTML/PDF documentation.
+- <a href="https://git-scm.com/install/windows" target="_blank">Doxygen (Doxywizard)</a> (Optional): Required to
+  generate HTML/PDF documentation.
 
 - <a href="https://releases.llvm.org/download.html" target="_blank">Clang-Format</a> : Required for automated code style
   enforcement.
@@ -23,23 +22,20 @@ Ensure the following tools are installed and available in your system PATH:
 ## CMake Configuration
 
 - **ENABLE_STRICT**: Enables application level strict mode by enforcing "treating all warnings as errors". **ON** by
-  default
-  in both CI/CD and CMakePresets.
+  default in both CI/CD and CMakePresets.
 - **ENABLE_TEST**: Enables *test application*. **ON** by default in both CI/CD and CMakePresets.
 
 ## Getting Started
 
 ### Configuration
 
-Initialize the build system and download dependencies.
-Bash
+Initialize the build system and download dependencies. Bash
 
 `cmake -B build`
 
 ### Compilation
 
-Compile the entire project, including tests and benchmarks.
-Bash
+Compile the entire project, including tests and benchmarks. Bash
 
 `cmake --build build`
 
