@@ -1,31 +1,46 @@
 ﻿// vulkan_guide.h : Include file for standard system include files,
 // or project specific include files.
-
 #pragma once
 
-#include <vk_types.h>
+#include <cstdint>
 
-class VulkanEngine {
-public:
+/// Forward declarations
+struct SDL_Window;
 
-	bool _isInitialized{ false };
-	int _frameNumber {0};
-	bool stop_rendering{ false };
-	VkExtent2D _windowExtent{ 1700 , 900 };
+namespace ephemeral
+{
+    struct Extent2D
+    {
+        uint32_t width, height;
+    };
 
-	struct SDL_Window* _window{ nullptr };
+    class EphemeralEngine
+    {
+    public:
+        SDL_Window* _window{ nullptr };
 
-	static VulkanEngine& Get();
+        static EphemeralEngine& Get();
 
-	//initializes everything in the engine
-	void init();
+        // initializes everything in the engine
+        void init();
 
-	//shuts down the engine
-	void cleanup();
+        // shuts down the engine
+        void cleanup();
 
-	//draw loop
-	void draw();
+        // draw loop
+        void draw();
 
-	//run main loop
-	void run();
-};
+        // run main loop
+        void run();
+
+        // Global variables
+        static constexpr auto ENGINE_NAME = "Ephemeral";
+
+    protected:
+        bool _isInitialized{ false };
+        int _frameNumber{ 0 };
+        bool stopRendering{ false };
+        Extent2D _windowExtent{ .width = 1700, .height = 900 };
+    };
+
+} // namespace ephemeral

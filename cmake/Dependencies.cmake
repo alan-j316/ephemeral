@@ -158,7 +158,7 @@ target_include_directories(DearImGui PUBLIC
         ${dearimgui_SOURCE_DIR}/backends
 )
 
-target_link_libraries(DearImGui PUBLIC SDL3::SDL3)
+target_link_libraries(DearImGui PUBLIC SDL3::SDL3 Vulkan::Headers)
 
 add_library(stb INTERFACE
         ${stb_SOURCE_DIR}/stb_image.h

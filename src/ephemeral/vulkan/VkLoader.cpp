@@ -1,2 +1,4 @@
 ﻿
-#include <vk_loader.h>
+#include "VkLoader.h"
+
+namespace ephemeral {}

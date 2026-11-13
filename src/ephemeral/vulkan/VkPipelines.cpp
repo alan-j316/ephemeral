@@ -1,1 +1,6 @@
-﻿#include <vk_pipelines.h>
+﻿#include "VkPipelines.h"
+
+namespace ephemeral
+{
+
+}
