@@ -15,7 +15,7 @@ int main()
 {
     ephemeral::EphemeralEngine engine;
 
-    engine.init();
+    engine.init("Ephemeral");
     engine.run();
     engine.cleanup();
 

@@ -44,7 +44,6 @@ FetchContent_Declare(
         GIT_PROGRESS TRUE
 )
 set(PROJECT_IS_TOP_LEVEL OFF)
-FetchContent_MakeAvailable(VulkanHeaders) # vulkanheaders has a proper CMakeLists
 
 
 #-------------------------------------------------------------------------
@@ -131,6 +130,7 @@ FetchContent_Declare(
 
 
 FetchContent_MakeAvailable(SDL3)
+#FetchContent_MakeAvailable(VulkanHeaders) # vulkanheaders has a proper CMakeLists
 FetchContent_MakeAvailable(Falcon)
 FetchContent_MakeAvailable(VulkanMemoryAllocator)
 FetchContent_MakeAvailable(VkBootstrap)

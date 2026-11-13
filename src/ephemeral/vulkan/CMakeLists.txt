@@ -1,4 +1,3 @@
-
 # Add source to this project's executable.
 add_library(
         EphemeralRenderer_Internal STATIC
@@ -32,8 +31,7 @@ set_property(TARGET EphemeralRenderer_Internal PROPERTY CXX_STANDARD 20)
 target_include_directories(EphemeralRenderer_Internal PRIVATE "${EPHEMERAL_ROOT_DIR}")
 
 target_link_libraries(EphemeralRenderer_Internal PRIVATE
-        Vulkan-Headers
-        #        Vulkan::Vulkan
+        Vulkan::Vulkan
         fmt::fmt
         std::stb
         SDL3::SDL3

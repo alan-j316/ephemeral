@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 project(Ephemeral LANGUAGES CXX)
 enable_testing()
-
+find_package(Vulkan REQUIRED)
 
 # Turn on solution folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)

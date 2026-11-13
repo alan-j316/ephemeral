@@ -3,9 +3,14 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+
+
 
 /// Forward declarations
 struct SDL_Window;
+
+
 
 namespace ephemeral
 {
@@ -22,7 +27,7 @@ namespace ephemeral
         static EphemeralEngine& Get();
 
         // initializes everything in the engine
-        void init();
+        void init(std::string appName);
 
         // shuts down the engine
         void cleanup();
@@ -34,13 +39,26 @@ namespace ephemeral
         void run();
 
         // Global variables
-        static constexpr auto ENGINE_NAME = "Ephemeral";
+        static constexpr auto ENGINE_NAME               = "Ephemeral";
+        static constexpr bool VALIDATION_LAYERS_ENABLED = true;
 
     protected:
         bool _isInitialized{ false };
         int _frameNumber{ 0 };
         bool stopRendering{ false };
         Extent2D _windowExtent{ .width = 1700, .height = 900 };
+        std::string _appName{};
+
+        struct EphemeralEngineContext* _ctx{};
+
+    private:
+        void initVulkan() noexcept;
+        void initSwapChain() noexcept;
+        void initCommands() noexcept;
+        void initSyncStructures() noexcept;
+
+        void createSwapChain(uint32_t width, uint32_t height) noexcept;
+        void destroySwapChain() const;
     };
 
 } // namespace ephemeral
