@@ -23,6 +23,13 @@
 namespace ephemeral
 {
 
+    struct FrameData
+    {
+        VkCommandPool cmdPool;
+        VkCommandBuffer mainCmdBuffer;
+    };
+
+
     // Main Engine Context(PIMPL used to remove header leakage)
     struct EphemeralEngineContext
     {
@@ -40,6 +47,11 @@ namespace ephemeral
         std::vector<VkImage> swapChainImages;
         std::vector<VkImageView> swapChainImageViews;
         VkExtent2D swapChainExtent;
+
+        // ------------------------ COMMAND POOLS & BUFFERS ------------------------
+        FrameData frames[EphemeralEngine::FRAME_OVERLAP];
+        VkQueue graphicsQueue;
+        uint32_t graphicsQueueFamily;
     };
 
 
@@ -79,6 +91,11 @@ namespace ephemeral
         if (_isInitialized)
         {
             // ------------------------ VULKAN ------------------------
+            vkDeviceWaitIdle(_ctx->device);
+            for (const auto& frame : _ctx->frames)
+            {
+                vkDestroyCommandPool(_ctx->device, frame.cmdPool, _ctx->allocator);
+            }
             destroySwapChain();
             vkDestroySurfaceKHR(_ctx->instance, _ctx->surface, _ctx->allocator);
             vkDestroyDevice(_ctx->device, _ctx->allocator);
@@ -189,19 +206,34 @@ namespace ephemeral
 
         _ctx->gpu    = physicalDevice.physical_device;
         _ctx->device = vkbDevice.device;
+
+
+        // ------------------------ GRAPHICS QUEUE ------------------------
+        _ctx->graphicsQueue       = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+        _ctx->graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
     }
 
 
     void EphemeralEngine::initSwapChain() noexcept { createSwapChain(_windowExtent.width, _windowExtent.height); }
 
 
-    void EphemeralEngine::initCommands() noexcept {}
+    void EphemeralEngine::initCommands() noexcept
+    {
+        const VkCommandPoolCreateInfo commandPoolInfo = vkutils::commandPoolCreateInfo(
+            _ctx->graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+        for (size_t i = 0; i < FRAME_OVERLAP; ++i)
+        {
+            VK_CHECK(vkCreateCommandPool(_ctx->device, &commandPoolInfo, _ctx->allocator, &_ctx->frames[i].cmdPool));
+            VkCommandBufferAllocateInfo cmdBufferInfo = vkutils::commandBufferAllocateInfo(_ctx->frames[i].cmdPool, 1);
+            VK_CHECK(vkAllocateCommandBuffers(_ctx->device, &cmdBufferInfo, &_ctx->frames[i].mainCmdBuffer));
+        }
+    }
 
 
     void EphemeralEngine::initSyncStructures() noexcept {}
 
 
-    void EphemeralEngine::createSwapChain(uint32_t width, uint32_t height) noexcept
+    void EphemeralEngine::createSwapChain(const uint32_t width, const uint32_t height) noexcept
     {
         vkb::SwapchainBuilder swapChainBuilder{ _ctx->gpu, _ctx->device, _ctx->surface };
         _ctx->swapChainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
@@ -232,5 +264,7 @@ namespace ephemeral
             vkDestroyImageView(_ctx->device, imgView, _ctx->allocator);
         }
     }
+
+    FrameData& EphemeralEngine::currentFrame() const noexcept { return _ctx->frames[_frameNumber % FRAME_OVERLAP]; }
 
 } // namespace ephemeral

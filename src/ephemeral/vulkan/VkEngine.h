@@ -6,10 +6,8 @@
 #include <string>
 
 
-
 /// Forward declarations
 struct SDL_Window;
-
 
 
 namespace ephemeral
@@ -38,9 +36,10 @@ namespace ephemeral
         // run main loop
         void run();
 
-        // Global variables
+        // Config variables
         static constexpr auto ENGINE_NAME               = "Ephemeral";
         static constexpr bool VALIDATION_LAYERS_ENABLED = true;
+        static constexpr size_t FRAME_OVERLAP    = 2;
 
     protected:
         bool _isInitialized{ false };
@@ -53,12 +52,18 @@ namespace ephemeral
 
     private:
         void initVulkan() noexcept;
+
         void initSwapChain() noexcept;
+
         void initCommands() noexcept;
+
         void initSyncStructures() noexcept;
 
         void createSwapChain(uint32_t width, uint32_t height) noexcept;
+
         void destroySwapChain() const;
+
+        struct FrameData& currentFrame() const noexcept;
     };
 
 } // namespace ephemeral
