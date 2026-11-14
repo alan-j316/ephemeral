@@ -24,28 +24,34 @@ target_link_libraries(
 
 # ------- SHADER COMPILATION(vkguide.dev) ---------------
 
-#find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
-#
-#file(GLOB_RECURSE GLSL_SOURCE_FILES
-#        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.frag"
-#        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.vert"
-#        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.comp"
-#)
-#
-#foreach (GLSL ${GLSL_SOURCE_FILES})
-#    message(STATUS "BUILDING SHADER")
-#    get_filename_component(FILE_NAME ${GLSL} NAME)
-#    set(SPIRV "${CMAKE_CURRENT_LIST_DIR}/shaders/${FILE_NAME}.spv")
-#    message(STATUS ${GLSL})
-#    add_custom_command(
-#            OUTPUT ${SPIRV}
-#            COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
-#            DEPENDS ${GLSL})
-#    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
-#endforeach (GLSL)
-#
+find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
+
+file(GLOB_RECURSE GLSL_SOURCE_FILES
+        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.frag"
+        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.vert"
+        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.comp"
+)
+
+foreach (GLSL ${GLSL_SOURCE_FILES})
+    message(STATUS "BUILDING SHADER")
+    get_filename_component(FILE_NAME ${GLSL} NAME)
+    set(SPIRV_DIR "$<TARGET_FILE_DIR:${ENGINE_NAME}>/shaders")
+    set(SPIRV "${SPIRV_DIR}/${FILE_NAME}.spv")
+    message(STATUS ${GLSL})
+    add_custom_command(
+            TARGET ${ENGINE_NAME}
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${SPIRV_DIR}
+    )
+    add_custom_command(
+            TARGET ${ENGINE_NAME}
+            POST_BUILD
+            COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
+    )
+endforeach (GLSL)
+
 #add_custom_target(
-#        Shaders
+#        CompileShaders
 #        DEPENDS ${SPIRV_BINARY_FILES}
 #)
 
