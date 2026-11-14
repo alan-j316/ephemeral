@@ -88,8 +88,8 @@ namespace ephemeral::vkutils
         return info;
     }
 
-    VkSubmitInfo2 submitInfo(VkCommandBufferSubmitInfo* cmd, VkSemaphoreSubmitInfo* signalSemaphoreInfo,
-                              VkSemaphoreSubmitInfo* waitSemaphoreInfo)
+    VkSubmitInfo2 submitInfo(const VkCommandBufferSubmitInfo* cmd, const VkSemaphoreSubmitInfo* signalSemaphoreInfo,
+                             const VkSemaphoreSubmitInfo* waitSemaphoreInfo)
     {
         VkSubmitInfo2 info = {};
         info.sType         = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
@@ -112,7 +112,7 @@ namespace ephemeral::vkutils
     {
         VkPresentInfoKHR info = {};
         info.sType            = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        info.pNext            = 0;
+        info.pNext            = nullptr;
 
         info.swapchainCount     = 0;
         info.pSwapchains        = nullptr;
@@ -124,8 +124,8 @@ namespace ephemeral::vkutils
     }
 
     //> color_info
-    VkRenderingAttachmentInfo attachmentInfo(VkImageView view, VkClearValue* clear,
-                                              VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/)
+    VkRenderingAttachmentInfo attachmentInfo(const VkImageView view, const VkClearValue* clear,
+                                             const VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/)
     {
         VkRenderingAttachmentInfo colorAttachment{};
         colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -145,7 +145,7 @@ namespace ephemeral::vkutils
     //< color_info
     //> depth_info
     VkRenderingAttachmentInfo depthAttachmentInfo(VkImageView view,
-                                                    VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/)
+                                                  VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/)
     {
         VkRenderingAttachmentInfo depthAttachment{};
         depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -161,14 +161,14 @@ namespace ephemeral::vkutils
     }
     //< depth_info
     //> render_info
-    VkRenderingInfo renderingInfo(VkExtent2D renderExtent, VkRenderingAttachmentInfo* colorAttachment,
-                                   VkRenderingAttachmentInfo* depthAttachment)
+    VkRenderingInfo renderingInfo(const VkExtent2D renderExtent, const VkRenderingAttachmentInfo* colorAttachment,
+                                  const VkRenderingAttachmentInfo* depthAttachment)
     {
         VkRenderingInfo renderInfo{};
         renderInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
         renderInfo.pNext = nullptr;
 
-        renderInfo.renderArea           = VkRect2D{ VkOffset2D{ 0, 0 }, renderExtent };
+        renderInfo.renderArea           = VkRect2D{ .offset = VkOffset2D{ .x = 0, .y = 0 }, .extent = renderExtent };
         renderInfo.layerCount           = 1;
         renderInfo.colorAttachmentCount = 1;
         renderInfo.pColorAttachments    = colorAttachment;
@@ -193,9 +193,8 @@ namespace ephemeral::vkutils
     //< subresource
 
 
-
-    VkDescriptorSetLayoutBinding descriptorsetLayoutBinding(VkDescriptorType type, VkShaderStageFlags stageFlags,
-                                                              uint32_t binding)
+    VkDescriptorSetLayoutBinding descriptorsetLayoutBinding(const VkDescriptorType type,
+                                                            const VkShaderStageFlags stageFlags, const uint32_t binding)
     {
         VkDescriptorSetLayoutBinding setbind = {};
         setbind.binding                      = binding;
@@ -207,8 +206,8 @@ namespace ephemeral::vkutils
         return setbind;
     }
 
-    VkDescriptorSetLayoutCreateInfo descriptorsetLayoutCreateInfo(VkDescriptorSetLayoutBinding* bindings,
-                                                                     uint32_t bindingCount)
+    VkDescriptorSetLayoutCreateInfo descriptorsetLayoutCreateInfo(const VkDescriptorSetLayoutBinding* bindings,
+                                                                  const uint32_t bindingCount)
     {
         VkDescriptorSetLayoutCreateInfo info = {};
         info.sType                           = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -221,8 +220,8 @@ namespace ephemeral::vkutils
         return info;
     }
 
-    VkWriteDescriptorSet writeDescriptorImage(VkDescriptorType type, VkDescriptorSet dstSet,
-                                                VkDescriptorImageInfo* imageInfo, uint32_t binding)
+    VkWriteDescriptorSet writeDescriptorImage(const VkDescriptorType type, const VkDescriptorSet dstSet,
+                                              const VkDescriptorImageInfo* imageInfo, const uint32_t binding)
     {
         VkWriteDescriptorSet write = {};
         write.sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -237,8 +236,8 @@ namespace ephemeral::vkutils
         return write;
     }
 
-    VkWriteDescriptorSet writeDescriptorBuffer(VkDescriptorType type, VkDescriptorSet dstSet,
-                                                 VkDescriptorBufferInfo* bufferInfo, uint32_t binding)
+    VkWriteDescriptorSet writeDescriptorBuffer(const VkDescriptorType type, const VkDescriptorSet dstSet,
+                                               const VkDescriptorBufferInfo* bufferInfo, const uint32_t binding)
     {
         VkWriteDescriptorSet write = {};
         write.sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -253,7 +252,7 @@ namespace ephemeral::vkutils
         return write;
     }
 
-    VkDescriptorBufferInfo bufferInfo(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range)
+    VkDescriptorBufferInfo bufferInfo(const VkBuffer buffer, const VkDeviceSize offset, VkDeviceSize range)
     {
         VkDescriptorBufferInfo binfo{};
         binfo.buffer = buffer;
@@ -263,11 +262,12 @@ namespace ephemeral::vkutils
     }
 
     //> image_set
-    VkImageCreateInfo imageCreateInfo(VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent)
+    VkImageCreateInfo imageCreateInfo(const VkFormat format, const VkImageUsageFlags usageFlags,
+                                      const VkExtent3D extent)
     {
-        VkImageCreateInfo info = {};
-        info.sType             = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        info.pNext             = nullptr;
+        VkImageCreateInfo info{ .sType   = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                                .pNext   = nullptr,
+                                .samples = VK_SAMPLE_COUNT_1_BIT };
 
         info.imageType = VK_IMAGE_TYPE_2D;
 
@@ -277,9 +277,6 @@ namespace ephemeral::vkutils
         info.mipLevels   = 1;
         info.arrayLayers = 1;
 
-        // for MSAA. we will not be using it by default, so default it to 1 sample per pixel.
-        info.samples = VK_SAMPLE_COUNT_1_BIT;
-
         // optimal tiling, which means the image is stored on the best gpu format
         info.tiling = VK_IMAGE_TILING_OPTIMAL;
         info.usage  = usageFlags;
@@ -287,7 +284,8 @@ namespace ephemeral::vkutils
         return info;
     }
 
-    VkImageViewCreateInfo imageviewCreateInfo(VkFormat format, VkImage image, VkImageAspectFlags aspectFlags)
+    VkImageViewCreateInfo imageviewCreateInfo(const VkFormat format, const VkImage image,
+                                              const VkImageAspectFlags aspectFlags)
     {
         // build a image-view for the depth image to use for rendering
         VkImageViewCreateInfo info = {};
@@ -321,19 +319,20 @@ namespace ephemeral::vkutils
         return info;
     }
 
-    VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo(VkShaderStageFlagBits stage,
-                                                                      VkShaderModule shaderModule, const char* entry)
+    VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo(const VkShaderStageFlagBits stage,
+                                                                  const VkShaderModule shaderModule, const char* entry)
     {
-        VkPipelineShaderStageCreateInfo info{};
-        info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        info.pNext = nullptr;
+        const VkPipelineShaderStageCreateInfo info{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = nullptr,
+            // shader stage
+            .stage = stage,
+            // module containing the code for this shader stage
+            .module = shaderModule,
+            // the entry point of the shader
+            .pName = entry,
+        };
 
-        // shader stage
-        info.stage = stage;
-        // module containing the code for this shader stage
-        info.module = shaderModule;
-        // the entry point of the shader
-        info.pName = entry;
         return info;
     }
 } // namespace ephemeral::vkutils

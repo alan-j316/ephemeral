@@ -7,6 +7,7 @@ add_library(
         VkPipelines.cpp
         VkEngine.cpp
         VkLoader.cpp
+        VMA.cpp
 )
 
 target_sources(

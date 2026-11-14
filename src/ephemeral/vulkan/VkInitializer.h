@@ -18,18 +18,18 @@ namespace ephemeral::vkutils
 
     VkSemaphoreCreateInfo semaphoreCreateInfo(VkSemaphoreCreateFlags flags = 0);
 
-    VkSubmitInfo2 submitInfo(VkCommandBufferSubmitInfo* cmd, VkSemaphoreSubmitInfo* signalSemaphoreInfo,
-                              VkSemaphoreSubmitInfo* waitSemaphoreInfo);
+    VkSubmitInfo2 submitInfo(const VkCommandBufferSubmitInfo* cmd, const VkSemaphoreSubmitInfo* signalSemaphoreInfo,
+                             const VkSemaphoreSubmitInfo* waitSemaphoreInfo);
     VkPresentInfoKHR presentInfo();
 
-    VkRenderingAttachmentInfo attachmentInfo(VkImageView view, VkClearValue* clear,
+    VkRenderingAttachmentInfo attachmentInfo(VkImageView view, const VkClearValue* clear,
                                               VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/);
 
     VkRenderingAttachmentInfo depthAttachmentInfo(
         VkImageView view, VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/);
 
-    VkRenderingInfo renderingInfo(VkExtent2D renderExtent, VkRenderingAttachmentInfo* colorAttachment,
-                                   VkRenderingAttachmentInfo* depthAttachment);
+    VkRenderingInfo renderingInfo(VkExtent2D renderExtent, const VkRenderingAttachmentInfo* colorAttachment,
+                                  const VkRenderingAttachmentInfo* depthAttachment);
 
     VkImageSubresourceRange imageSubresourceRange(VkImageAspectFlags aspectMask);
 
@@ -39,9 +39,9 @@ namespace ephemeral::vkutils
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo(VkDescriptorSetLayoutBinding* bindings,
                                                                      uint32_t bindingCount);
     VkWriteDescriptorSet writeDescriptorImage(VkDescriptorType type, VkDescriptorSet dstSet,
-                                                VkDescriptorImageInfo* imageInfo, uint32_t binding);
+                                              const VkDescriptorImageInfo* imageInfo, uint32_t binding);
     VkWriteDescriptorSet writeDescriptorBuffer(VkDescriptorType type, VkDescriptorSet dstSet,
-                                                 VkDescriptorBufferInfo* bufferInfo, uint32_t binding);
+                                               const VkDescriptorBufferInfo* bufferInfo, uint32_t binding);
     VkDescriptorBufferInfo bufferInfo(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range);
 
     VkImageCreateInfo imageCreateInfo(VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent);

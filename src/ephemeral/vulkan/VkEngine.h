@@ -7,7 +7,9 @@
 
 
 /// Forward declarations
-struct SDL_Window;
+// clang-tidy off
+struct SDL_Window; // NOLINT(readability-identifier-naming)
+// clang format on
 
 
 namespace ephemeral
@@ -20,9 +22,8 @@ namespace ephemeral
     class EphemeralEngine
     {
     public:
-        SDL_Window* _window{ nullptr };
 
-        static EphemeralEngine& Get();
+        static EphemeralEngine& get();
 
         // initializes everything in the engine
         void init(std::string appName);
@@ -44,11 +45,13 @@ namespace ephemeral
     protected:
         bool _isInitialized{ false };
         int _frameNumber{ 0 };
-        bool stopRendering{ false };
+        bool _stopRendering{ false };
         Extent2D _windowExtent{ .width = 1700, .height = 900 };
         std::string _appName{};
 
-        struct EphemeralEngineContext* _ctx{};
+        SDL_Window* _window{ nullptr };
+
+        struct EphemeralEngineContext* _ctx{}; // NOLINT(readability-identifier-naming)
 
     private:
         void initVulkan() noexcept;
@@ -63,7 +66,7 @@ namespace ephemeral
 
         void destroySwapChain() const;
 
-        struct FrameData& currentFrame() const noexcept;
+        [[nodiscard]] struct FrameData& currentFrame() const noexcept; // NOLINT(readability-identifier-naming)
     };
 
 } // namespace ephemeral

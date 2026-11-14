@@ -13,11 +13,8 @@
 #include <vulkan/vulkan.h>
 
 
-namespace ephemeral
+namespace ephemeral::vkutils
 {
-
-    namespace vkutils
-    {
-        void transitionImage(VkCommandBuffer cmdBuffer, VkImage img, VkImageLayout oldLayout, VkImageLayout newLayout) noexcept;
-    }
+    void transitionImage(VkCommandBuffer cmdBuffer, VkImage img, VkImageLayout oldLayout,
+                         VkImageLayout newLayout) noexcept;
 }

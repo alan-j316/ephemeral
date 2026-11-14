@@ -9,28 +9,31 @@
  * @copyright Copyright (c) 2026 Alan Abraham P Kochumon
  */
 
-#include <functional>
 #include <deque>
+#include <functional>
 
 namespace ephemeral
 {
 
     struct DeletionQueue
     {
-        std::deque<std::function<void()> > deletors;
+        std::deque<std::function<void()>> queue;
 
         /**
-        * @brief Add a function to the back of the deletion queue.
-        */
-        void push(std::function<void()>&& function) { deletors.push_back(function); }
+         * @brief Add a function to the back of the deletion queue.
+         */
+        void push(std::function<void()>&& function) { queue.push_back(function); }
 
         /**
-        * @brief Delete all the objects in a Last In First Out manner.
-        */
+         * @brief Delete all the objects in a Last In First Out manner.
+         */
         void flush()
         {
-            for (auto it = deletors.rbegin(); it != deletors.rend(); ++it) { (*it)(); }
-            deletors.clear();
+            for (auto it = queue.rbegin(); it != queue.rend(); ++it)
+            {
+                (*it)();
+            }
+            queue.clear();
         }
     };
-}
+} // namespace ephemeral
