@@ -12,4 +12,11 @@
 #include "VkTypes.h"
 
 namespace ephemeral
-{};
+{
+
+    namespace vkutils
+    {
+        bool loadShaderModule(const char* filePath, VkDevice device, const VkAllocationCallbacks* pAllocator,
+                              VkShaderModule* outShaderModule) noexcept;
+    }
+}

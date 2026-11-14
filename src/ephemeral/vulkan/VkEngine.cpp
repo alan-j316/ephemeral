@@ -10,8 +10,10 @@
 
 #include "VkEngine.h"
 
+#include "VkDescriptors.h"
 #include "VkImages.h"
 #include "VkInitializer.h"
+#include "VkPipelines.h"
 #include "VkTypes.h"
 
 #include <SDL3/SDL.h>
@@ -74,6 +76,15 @@ namespace ephemeral
         VulkanImage drawImage;
         VkExtent2D drawExtent;
 
+        // ------------------------ DESCRIPTORS ------------------------
+        DescriptorAllocator gDescriptorAllocator;
+        VkDescriptorSet drawImageDescriptorSet;
+        VkDescriptorSetLayout drawImageDescriptorSetLayout;
+
+        // ------------------------ PIPELINES ------------------------
+        VkPipelineLayout gradientPipelineLayout;
+        VkPipeline gradientPipeline;
+
 
         // ------------------------ ENGINE GLOBAL ------------------------
         DeletionQueue mainDeletionQueue;
@@ -109,6 +120,8 @@ namespace ephemeral
         initSwapChain();
         initCommands();
         initSyncStructures();
+        initDescriptors();
+        initPipelines();
 
 
         // everything went fine
@@ -167,12 +180,18 @@ namespace ephemeral
                                       const EphemeralEngineContext& ctx) noexcept
     {
         // Create a frame number dependent clear color
-        const float flash = std::abs(std::sin(static_cast<float>(frameNumber) / 120.f));
-        const VkClearColorValue clearColor{ flash, flash, 0.0f, 1.0f };
-        const VkImageSubresourceRange clearRange = vkutils::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-
-        vkCmdClearColorImage(cmdBuffer, ctx.drawImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1,
-                             &clearRange);
+        // const float flash = std::abs(std::sin(static_cast<float>(frameNumber) / 120.f));
+        // const VkClearColorValue clearColor{ flash, flash, 0.0f, 1.0f };
+        // const VkImageSubresourceRange clearRange = vkutils::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+        //
+        // vkCmdClearColorImage(cmdBuffer, ctx.drawImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1,
+        //                      &clearRange);
+        // Bind the pipeline and descriptor sets
+        vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipeline);
+        vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipelineLayout, 0, 1,
+                                &ctx.drawImageDescriptorSet, 0, nullptr);
+        // Execute the compute shader
+        vkCmdDispatch(cmdBuffer, std::ceil(ctx.drawExtent.width / 16.0), std::ceil(ctx.drawExtent.height / 16.0), 1);
     }
 
 
@@ -196,6 +215,9 @@ namespace ephemeral
         const auto renderSemaphore = _ctx->renderSemaphores[swapChainImageIdx];
 
 
+        _ctx->drawExtent.width  = _ctx->drawImage.extent.width;
+        _ctx->drawExtent.height = _ctx->drawImage.extent.height;
+
         // ------------------------ COMMAND BUFFER RECORDING ------------------------
         // Reset the command buffer and begin recording the commands
         const VkCommandBuffer cmdBuffer = currentFrame().mainCmdBuffer;
@@ -208,12 +230,11 @@ namespace ephemeral
 
 
         // Transition the draw image to a writeable layout
-        vkutils::transitionImage(cmdBuffer, _ctx->drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        vkutils::transitionImage(cmdBuffer, _ctx->drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
         // Draw to the 'draw' image.
         drawBackground(cmdBuffer, _frameNumber, *_ctx);
 
-        vkutils::transitionImage(cmdBuffer, _ctx->drawImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vkutils::transitionImage(cmdBuffer, _ctx->drawImage.image, VK_IMAGE_LAYOUT_GENERAL,
                                  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         // Transition the swap chain image
         vkutils::transitionImage(cmdBuffer, _ctx->swapChainImages[swapChainImageIdx], VK_IMAGE_LAYOUT_UNDEFINED,
@@ -368,7 +389,7 @@ namespace ephemeral
                                               .instance       = _ctx->instance };
         vmaCreateAllocator(&vmaInfo, &_ctx->vma);
 
-        _ctx->mainDeletionQueue.push([&]() {
+        _ctx->mainDeletionQueue.push([&] {
             vmaDestroyAllocator(_ctx->vma);
         });
     }
@@ -444,6 +465,102 @@ namespace ephemeral
             VK_CHECK(
                 vkCreateSemaphore(_ctx->device, &semaphoreCreateInfo, _ctx->allocator, &_ctx->renderSemaphores[i]));
         }
+    }
+
+
+    void EphemeralEngine::initDescriptors() noexcept
+    {
+        // ------------------------ CREATE POOLS & DESCRIPTORS ------------------------
+        // Create a descriptor pool that will hold 10 sets with 1 image each.
+        // STORAGE_IMAGE - Compute Shader Write Target
+        std::array sizes{ DescriptorAllocator::PoolSizeRatio{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 } };
+        _ctx->gDescriptorAllocator.init(_ctx->device, _ctx->allocator, 10, sizes);
+
+        // Make descriptor set layout for our compute shader
+        DescriptorSetLayoutBuilder builder;
+        builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        _ctx->drawImageDescriptorSetLayout = builder.build(_ctx->device, VK_SHADER_STAGE_COMPUTE_BIT, _ctx->allocator);
+        // Allocate the descriptor the image
+        _ctx->drawImageDescriptorSet =
+            _ctx->gDescriptorAllocator.allocate(_ctx->device, _ctx->drawImageDescriptorSetLayout);
+
+
+        // ------------------------ ATTACH OUR DRAW IMAGE TO THE DESCRIPTOR ------------------------
+        VkDescriptorImageInfo imageInfo{ .imageView   = _ctx->drawImage.imageView,
+                                         .imageLayout = VK_IMAGE_LAYOUT_GENERAL };
+
+        const VkWriteDescriptorSet drawImageWrite{ .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                                   .pNext           = nullptr,
+                                                   .dstSet          = _ctx->drawImageDescriptorSet,
+                                                   .dstBinding      = 0,
+                                                   .descriptorCount = 1,
+                                                   .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                                   .pImageInfo      = &imageInfo };
+
+
+        vkUpdateDescriptorSets(_ctx->device, 1, &drawImageWrite, 0, nullptr);
+        // Add the descriptor to the deletion queue
+        _ctx->mainDeletionQueue.push([&] {
+            _ctx->gDescriptorAllocator.destroyPool(_ctx->device, _ctx->allocator);
+            vkDestroyDescriptorSetLayout(_ctx->device, _ctx->drawImageDescriptorSetLayout, _ctx->allocator);
+        });
+    }
+
+
+    void EphemeralEngine::initPipelines() noexcept { initBackgroundPipelines(); }
+
+
+    void EphemeralEngine::initBackgroundPipelines() noexcept
+    {
+
+        // ------------------------ PIPELINE LAYOUT ------------------------
+        const VkPipelineLayoutCreateInfo pipelineLayoutInfo{ .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                                                             .pNext = nullptr,
+                                                             .flags = 0,
+                                                             .setLayoutCount = 1,
+                                                             .pSetLayouts    = &_ctx->drawImageDescriptorSetLayout,
+                                                             .pushConstantRangeCount = 0,
+                                                             .pPushConstantRanges    = nullptr };
+
+        VK_CHECK(
+            vkCreatePipelineLayout(_ctx->device, &pipelineLayoutInfo, _ctx->allocator, &_ctx->gradientPipelineLayout));
+
+
+        // ------------------------ SHADER STAGE ------------------------
+        VkShaderModule drawComputeShaderModule;
+        if (!vkutils::loadShaderModule("shaders/gradient.comp.spv", _ctx->device, _ctx->allocator,
+                                       &drawComputeShaderModule))
+        {
+            fmt::print("There was an error loading the shader module.");
+        }
+
+        const VkPipelineShaderStageCreateInfo shaderStageInfo{ .sType =
+                                                                   VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                                                               .pNext  = nullptr,
+                                                               .flags  = 0,
+                                                               .stage  = VK_SHADER_STAGE_COMPUTE_BIT,
+                                                               .module = drawComputeShaderModule,
+                                                               .pName  = "main" };
+
+
+        // ------------------------ PIPELINE ------------------------
+        const VkComputePipelineCreateInfo computePipelineInfo{ .sType  = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+                                                               .pNext  = nullptr,
+                                                               .flags  = 0,
+                                                               .stage  = shaderStageInfo,
+                                                               .layout = _ctx->gradientPipelineLayout };
+
+        VK_CHECK(vkCreateComputePipelines(_ctx->device, VK_NULL_HANDLE, 1, &computePipelineInfo, _ctx->allocator,
+                                          &_ctx->gradientPipeline));
+
+        // We can create the shader module after its bound to the pipeline
+        vkDestroyShaderModule(_ctx->device, drawComputeShaderModule, _ctx->allocator);
+
+        // Add the pipeline layout and pipeline to the deletion queue
+        _ctx->mainDeletionQueue.push([&] {
+            vkDestroyPipelineLayout(_ctx->device, _ctx->gradientPipelineLayout, _ctx->allocator);
+            vkDestroyPipeline(_ctx->device, _ctx->gradientPipeline, _ctx->allocator);
+        });
     }
 
 

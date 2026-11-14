@@ -61,9 +61,16 @@ namespace ephemeral
 
         void initSyncStructures() noexcept;
 
+        void initDescriptors() noexcept;
+
+        void initPipelines() noexcept;
+
+        void initBackgroundPipelines() noexcept;
+
         void createSwapChain(uint32_t width, uint32_t height) noexcept;
 
         void destroySwapChain() const;
+
 
         [[nodiscard]] struct FrameData& currentFrame() const noexcept; // NOLINT(readability-identifier-naming)
     };
