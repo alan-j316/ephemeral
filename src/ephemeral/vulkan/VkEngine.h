@@ -67,6 +67,8 @@ namespace ephemeral
 
         void initBackgroundPipelines() noexcept;
 
+        void initTrianglePipelines() noexcept;
+
         void createSwapChain(uint32_t width, uint32_t height) noexcept;
 
         void destroySwapChain() const;

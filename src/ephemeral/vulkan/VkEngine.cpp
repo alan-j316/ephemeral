@@ -106,6 +106,8 @@ namespace ephemeral
         // ------------------------ PIPELINES ------------------------
         VkPipelineLayout gradientPipelineLayout;
         VkPipeline gradientPipeline;
+        VkPipelineLayout trianglePipelineLayout;
+        VkPipeline trianglePipeline;
 
         // ------------------------ IMMEDIATE SUBMITS ------------------------
         VkFence immFence;
@@ -142,6 +144,39 @@ namespace ephemeral
 
         // Execute the compute shader
         vkCmdDispatch(cmdBuffer, std::ceil(ctx.drawExtent.width / 16.0), std::ceil(ctx.drawExtent.height / 16.0), 1);
+    }
+
+
+    inline static void drawGeometry(const VkCommandBuffer cmdBuffer, const EphemeralEngineContext& ctx) noexcept
+    {
+        // ------------------------ COLOR ATTACHMENTS ------------------------
+        const VkRenderingAttachmentInfo colorAttachment =
+            vkutils::attachmentInfo(ctx.drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+        const VkRenderingInfo renderingInfo = vkutils::renderingInfo(ctx.drawExtent, &colorAttachment, nullptr);
+
+        vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.trianglePipeline);
+
+        vkCmdBeginRendering(cmdBuffer, &renderingInfo);
+
+
+        // ------------------------ DYNAMIC STATES ------------------------
+        const VkViewport viewport{ .x        = 0,
+                                   .y        = 0,
+                                   .width    = static_cast<float>(ctx.drawExtent.width),
+                                   .height   = static_cast<float>(ctx.drawExtent.height),
+                                   .minDepth = 0.0f,
+                                   .maxDepth = 1.0f };
+        vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+
+        const VkRect2D scissor{ .offset = { .x = 0, .y = 0 },
+                                .extent = { .width = ctx.drawExtent.width, .height = ctx.drawExtent.height } };
+        vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
+
+
+        // ------------------------ RENDER ------------------------
+        vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
+        vkCmdEndRendering(cmdBuffer);
     }
 
 
@@ -315,8 +350,16 @@ namespace ephemeral
         // Draw to the 'draw' image.
         drawBackground(cmdBuffer, _frameNumber, *_ctx);
 
+        // Transition image to color attachment optimal for geometry
         vkutils::transitionImage(cmdBuffer, _ctx->drawImage.image, VK_IMAGE_LAYOUT_GENERAL,
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+        drawGeometry(cmdBuffer, *_ctx);
+
+        // Transition image to transfer src for blitting to swapchain image.
+        vkutils::transitionImage(cmdBuffer, _ctx->drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
         // Transition the swap chain image
         vkutils::transitionImage(cmdBuffer, _ctx->swapChainImages[swapChainImageIdx], VK_IMAGE_LAYOUT_UNDEFINED,
                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -633,7 +676,11 @@ namespace ephemeral
     }
 
 
-    void EphemeralEngine::initPipelines() noexcept { initBackgroundPipelines(); }
+    void EphemeralEngine::initPipelines() noexcept
+    {
+        initBackgroundPipelines();
+        initTrianglePipelines();
+    }
 
 
     void EphemeralEngine::initBackgroundPipelines() noexcept
@@ -714,6 +761,54 @@ namespace ephemeral
         _ctx->mainDeletionQueue.push([&] {
             vkDestroyPipelineLayout(_ctx->device, _ctx->gradientPipelineLayout, _ctx->allocator);
             vkDestroyPipeline(_ctx->device, _ctx->gradientPipeline, _ctx->allocator);
+        });
+    }
+
+
+    void EphemeralEngine::initTrianglePipelines() noexcept
+    {
+        // ------------------------ SHADER MODULES ------------------------
+        VkShaderModule triVertShader, triFragShader;
+        if (!vkutils::loadShaderModule("shaders/ColoredTriangle.vert.spv", _ctx->device, _ctx->allocator,
+                                       &triVertShader))
+        {
+            fmt::println("There was an error creating the triangle vertex shader");
+            return;
+        }
+
+        if (!vkutils::loadShaderModule("shaders/ColoredTriangle.frag.spv", _ctx->device, _ctx->allocator,
+                                       &triFragShader))
+        {
+            fmt::println("There was an error creating the triangle fragment shader");
+            return;
+        }
+
+        const VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkutils::pipelineLayoutCreateInfo();
+        VK_CHECK(
+            vkCreatePipelineLayout(_ctx->device, &pipelineLayoutInfo, _ctx->allocator, &_ctx->trianglePipelineLayout));
+
+
+        // ------------------------ PIPELINE BUILD ------------------------
+        PipelineBuilder builder;
+        builder.setPipelineLayout(_ctx->trianglePipelineLayout);
+        builder.setShaderStages(triVertShader, triFragShader);
+        builder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.setPolygonMode(VK_POLYGON_MODE_FILL);
+        builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        builder.disableMSAA();
+        builder.disableBlending();
+        builder.disableDepthTest();
+        builder.setColorAttachmentFormat(_ctx->drawImage.format);
+        builder.setDepthAttachmentFormat(VK_FORMAT_UNDEFINED);
+        _ctx->trianglePipeline = builder.build(_ctx->device, _ctx->allocator);
+
+        // ------------------------ CLEANUP ------------------------
+        vkDestroyShaderModule(_ctx->device, triVertShader, _ctx->allocator);
+        vkDestroyShaderModule(_ctx->device, triFragShader, _ctx->allocator);
+
+        _ctx->mainDeletionQueue.push([&] {
+            vkDestroyPipelineLayout(_ctx->device, _ctx->trianglePipelineLayout, _ctx->allocator);
+            vkDestroyPipeline(_ctx->device, _ctx->trianglePipeline, _ctx->allocator);
         });
     }
 

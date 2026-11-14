@@ -25,7 +25,7 @@ namespace ephemeral
 
 
         /// Set rendering primitive topology.
-        void setTopology(VkPrimitiveTopology topology) noexcept;
+        void setInputTopology(VkPrimitiveTopology topology) noexcept;
 
         /// Set the polygon mode(Fill/Line/Point)
         void setPolygonMode(VkPolygonMode mode) noexcept;
@@ -55,6 +55,9 @@ namespace ephemeral
 
         /// Clear all pipeline configurations to default values.
         void clear() noexcept;
+
+        /// Set the pipeline layout for the current pipeline.
+        void setPipelineLayout(VkPipelineLayout layout) noexcept;
 
     private:
         std::vector<VkPipelineShaderStageCreateInfo> _shaderStages;

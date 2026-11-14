@@ -65,7 +65,7 @@ namespace ephemeral
     }
 
 
-    void PipelineBuilder::setTopology(const VkPrimitiveTopology topology) noexcept
+    void PipelineBuilder::setInputTopology(const VkPrimitiveTopology topology) noexcept
     {
         _inputAssembly.topology               = topology;
         _inputAssembly.primitiveRestartEnable = VK_FALSE;
@@ -211,6 +211,9 @@ namespace ephemeral
         _renderingInfo        = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
         _shaderStages.clear();
     }
+
+
+    void PipelineBuilder::setPipelineLayout(const VkPipelineLayout layout) noexcept { _pipelineLayout = layout; }
 
 
 } // namespace ephemeral
