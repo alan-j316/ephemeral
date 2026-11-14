@@ -12,26 +12,25 @@
 #include <functional>
 #include <deque>
 
- namespace ephemeral {
+namespace ephemeral
+{
 
-    struct DeletionQueue {
-        std::deque<std::function<void()>> deletors;
+    struct DeletionQueue
+    {
+        std::deque<std::function<void()> > deletors;
 
         /**
         * @brief Add a function to the back of the deletion queue.
         */
-        void push(std::function<void()>&& function) {
-            deletors.push_back(function);
-        }
+        void push(std::function<void()>&& function) { deletors.push_back(function); }
 
         /**
         * @brief Delete all the objects in a Last In First Out manner.
         */
-        void flush() {
-                for(auto it= deletors.rbegin(); it != deletors.rend(); ++i) {
-                    (*it)();
-                }
-                deletors.clear();
+        void flush()
+        {
+            for (auto it = deletors.rbegin(); it != deletors.rend(); ++it) { (*it)(); }
+            deletors.clear();
         }
-    }
- }
+    };
+}

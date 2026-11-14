@@ -29,6 +29,8 @@ namespace ephemeral
     {
         VkCommandPool cmdPool;
         VkCommandBuffer mainCmdBuffer;
+
+        DeletionQueue deletionQueue;
     };
 
 
@@ -60,12 +62,17 @@ namespace ephemeral
         // NOTE: Number of render semaphores must match the number of swap chain images, not frame in flight
         std::vector<VkSemaphore> renderSemaphores;
         std::array<VkFence, EphemeralEngine::FRAME_OVERLAP> renderFences;
+
+        // ------------------------ ENGINE GLOBAL ------------------------
+        DeletionQueue mainDeletionQueue;
     };
 
 
     EphemeralEngine* loadedEngine = nullptr;
 
+
     EphemeralEngine& EphemeralEngine::Get() { return *loadedEngine; }
+
 
     void EphemeralEngine::init(std::string appName)
     {
@@ -118,6 +125,9 @@ namespace ephemeral
                 vkDestroySemaphore(_ctx->device, renderSemaphore, _ctx->allocator);
             }
 
+            // Flush the deletion queue
+            _ctx->mainDeletionQueue.flush();
+
             destroySwapChain();
             vkDestroySurfaceKHR(_ctx->instance, _ctx->surface, _ctx->allocator);
             vkDestroyDevice(_ctx->device, _ctx->allocator);
@@ -147,6 +157,8 @@ namespace ephemeral
 
         // Wait for previous frame to finish
         VK_CHECK(vkWaitForFences(_ctx->device, 1, &curFence, true, TIMEOUT));
+        // Flush the deletion queue for the current frame
+        currentFrame().deletionQueue.flush();
         VK_CHECK(vkResetFences(_ctx->device, 1, &curFence));
 
         // Request an image from the swapchain
