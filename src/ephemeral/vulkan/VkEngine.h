@@ -2,7 +2,10 @@
 // or project specific include files.
 #pragma once
 
+#include "Geometry.h"
+
 #include <cstdint>
+#include <span>
 #include <string>
 
 
@@ -19,7 +22,6 @@ namespace ephemeral
     class EphemeralEngine
     {
     public:
-
         static EphemeralEngine& get();
 
         // initializes everything in the engine
@@ -69,12 +71,19 @@ namespace ephemeral
 
         void initTrianglePipelines() noexcept;
 
+        void initMeshPipelines() noexcept;
+
         void createSwapChain(uint32_t width, uint32_t height) noexcept;
 
         void destroySwapChain() const;
 
         void initImgui() noexcept;
 
+        void initDefaultData() noexcept;
+
+        void uploadMesh(
+            std::span<uint32_t> indices, std::span<Vertex> vertices,
+            struct GPUMeshBuffers& outBuffer) const noexcept; // NOLINT(readability-identifier-naming)
 
         [[nodiscard]] struct FrameData& currentFrame() const noexcept; // NOLINT(readability-identifier-naming)
     };

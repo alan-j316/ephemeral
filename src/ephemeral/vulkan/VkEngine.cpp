@@ -10,6 +10,7 @@
 
 #include "VkEngine.h"
 
+#include "Geometry.h"
 #include "VkDescriptors.h"
 #include "VkImages.h"
 #include "VkInitializer.h"
@@ -108,6 +109,8 @@ namespace ephemeral
         VkPipeline gradientPipeline;
         VkPipelineLayout trianglePipelineLayout;
         VkPipeline trianglePipeline;
+        VkPipelineLayout meshPipelineLayout;
+        VkPipeline meshPipeline;
 
         // ------------------------ IMMEDIATE SUBMITS ------------------------
         VkFence immFence;
@@ -120,9 +123,10 @@ namespace ephemeral
         // ------------------------ ENGINE GLOBAL ------------------------
         DeletionQueue mainDeletionQueue;
 
-        // ------------------------ ENGINE GLOBAL ------------------------
+        // ------------------------ DATA ------------------------
         std::vector<ComputeEffect> bgEffects{};
         int currentBgEffect{ 0 };
+        GPUMeshBuffers rectangle;
     };
 
     /// +---------------------------------------------------------------------------------------+
@@ -176,6 +180,15 @@ namespace ephemeral
 
         // ------------------------ RENDER ------------------------
         vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
+
+        vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipeline);
+
+        const GPUDrawPushConstants pc{ .worldMatrix  = flcn::Mat4F::identity(),
+                                       .vertexBuffer = ctx.rectangle.vertexBufferAddress };
+        vkCmdPushConstants(cmdBuffer, ctx.meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+        vkCmdBindIndexBuffer(cmdBuffer, ctx.rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(cmdBuffer, 6, 1, 0, 0, 0);
+
         vkCmdEndRendering(cmdBuffer);
     }
 
@@ -257,6 +270,7 @@ namespace ephemeral
 
 
         initImgui();
+        initDefaultData();
 
 
         // everything went fine
@@ -680,6 +694,7 @@ namespace ephemeral
     {
         initBackgroundPipelines();
         initTrianglePipelines();
+        initMeshPipelines();
     }
 
 
@@ -813,6 +828,62 @@ namespace ephemeral
     }
 
 
+    void EphemeralEngine::initMeshPipelines() noexcept
+    {
+        // ------------------------ SHADER MODULES ------------------------
+        VkShaderModule vertexShader, fragmentShader;
+        if (!vkutils::loadShaderModule("shaders/ColoredTriangleMesh.vert.spv", _ctx->device, _ctx->allocator,
+                                       &vertexShader))
+        {
+            fmt::println("There was an error loading the mesh vertex shader");
+            return;
+        }
+        if (!vkutils::loadShaderModule("shaders/ColoredTriangle.frag.spv", _ctx->device, _ctx->allocator,
+                                       &fragmentShader))
+        {
+            fmt::println("There was an error loading the mesh fragment shader");
+            return;
+        }
+
+
+        // ------------------------ PIPELINE LAYOUT ------------------------
+        VkPushConstantRange pushConstants{ .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                                           .offset     = 0,
+                                           .size       = sizeof(GPUDrawPushConstants) };
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkutils::pipelineLayoutCreateInfo();
+        pipelineLayoutInfo.pushConstantRangeCount     = 1;
+        pipelineLayoutInfo.pPushConstantRanges        = &pushConstants;
+
+        VK_CHECK(vkCreatePipelineLayout(_ctx->device, &pipelineLayoutInfo, _ctx->allocator, &_ctx->meshPipelineLayout));
+
+
+        // ------------------------ PIPELINE BUILD ------------------------
+        PipelineBuilder pipelineBuilder;
+        pipelineBuilder.setPipelineLayout(_ctx->meshPipelineLayout);
+        pipelineBuilder.setShaderStages(vertexShader, fragmentShader);
+        pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
+        pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+        pipelineBuilder.disableMSAA();
+        pipelineBuilder.disableBlending();
+        pipelineBuilder.disableDepthTest();
+
+        pipelineBuilder.setColorAttachmentFormat(_ctx->drawImage.format);
+        pipelineBuilder.setDepthAttachmentFormat(VK_FORMAT_UNDEFINED);
+        _ctx->meshPipeline = pipelineBuilder.build(_ctx->device, _ctx->allocator);
+
+        // ------------------------ CLEANUP ------------------------
+        vkDestroyShaderModule(_ctx->device, vertexShader, _ctx->allocator);
+        vkDestroyShaderModule(_ctx->device, fragmentShader, _ctx->allocator);
+
+        _ctx->mainDeletionQueue.push([&] {
+            vkDestroyPipelineLayout(_ctx->device, _ctx->meshPipelineLayout, _ctx->allocator);
+            vkDestroyPipeline(_ctx->device, _ctx->meshPipeline, _ctx->allocator);
+        });
+    }
+
+
     void EphemeralEngine::createSwapChain(const uint32_t width, const uint32_t height) noexcept
     {
         vkb::SwapchainBuilder swapChainBuilder{ _ctx->gpu, _ctx->device, _ctx->surface };
@@ -907,6 +978,83 @@ namespace ephemeral
     }
 
 
+    void EphemeralEngine::initDefaultData() noexcept
+    {
+        std::array<Vertex, 4> rectVertices;
+        rectVertices[0].position = { 0.5f, -0.5f, 0.0f };
+        rectVertices[1].position = { 0.5f, 0.5f, 0.0f };
+        rectVertices[2].position = { -0.5f, -0.5f, 0.0f };
+        rectVertices[3].position = { -0.5f, 0.5f, 0.0f };
+
+        rectVertices[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
+        rectVertices[0].color = { 0.5f, 0.5f, 0.5f, 1.0f };
+        rectVertices[0].color = { 1.0f, 0.0f, 0.0f, 1.0f };
+        rectVertices[0].color = { 0.0f, 1.0f, 0.0f, 1.0f };
+
+        std::array<uint32_t, 6> indices{ 0, 1, 2, 2, 1, 3 };
+
+        uploadMesh(indices, rectVertices, _ctx->rectangle);
+
+        _ctx->mainDeletionQueue.push([&] {
+            destroyBuffer(_ctx->vma, _ctx->rectangle.indexBuffer);
+            destroyBuffer(_ctx->vma, _ctx->rectangle.vertexBuffer);
+        });
+    }
+
+
     FrameData& EphemeralEngine::currentFrame() const noexcept { return _ctx->frames[_frameNumber % FRAME_OVERLAP]; }
+
+
+    void EphemeralEngine::uploadMesh(const std::span<uint32_t> indices, const std::span<Vertex> vertices,
+                                     GPUMeshBuffers& outBuffer) const noexcept
+    {
+        const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
+        const size_t indexBufferSize  = indices.size() * sizeof(uint32_t);
+
+        // ------------------------ VERTEX BUFFER CREATION ------------------------
+        // NOLINTBEGIN
+        outBuffer.vertexBuffer =
+            createBuffer(vertexBufferSize, _ctx->vma,
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                             VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                         VMA_MEMORY_USAGE_GPU_ONLY);
+        // NOLINTEND
+
+
+        // ------------------------ FIND VERTEX ADDRESS ------------------------
+        const VkBufferDeviceAddressInfo deviceAddressInfo{ .sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                                                           .buffer = outBuffer.vertexBuffer.buffer };
+        outBuffer.vertexBufferAddress = vkGetBufferDeviceAddress(_ctx->device, &deviceAddressInfo);
+
+
+        // ------------------------ INDEX BUFFER CREATION ------------------------
+        // NOLINTBEGIN
+        outBuffer.indexBuffer = createBuffer(indexBufferSize, _ctx->vma,
+                                             VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                             VMA_MEMORY_USAGE_GPU_ONLY);
+        // NOLINTEND
+
+
+        // ------------------------ BUFFER COPY USING STAGING BUFFER ------------------------
+
+        const AllocatedBuffer staging = createBuffer(vertexBufferSize + indexBufferSize, _ctx->vma,
+                                                     VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+        void* data                    = staging.allocationInfo.pMappedData;
+
+        // Copy Vertex Buffer
+        memcpy(data, vertices.data(), vertexBufferSize);
+        // Copy Index Buffer
+        memcpy(static_cast<uint8_t*>(data) + vertexBufferSize, indices.data(), indexBufferSize);
+
+        immediateSubmit(*_ctx, [&](VkCommandBuffer cmdBuffer) {
+            const VkBufferCopy vertexCopy{ .srcOffset = 0, .dstOffset = 0, .size = vertexBufferSize };
+            vkCmdCopyBuffer(cmdBuffer, staging.buffer, outBuffer.vertexBuffer.buffer, 1, &vertexCopy);
+
+            const VkBufferCopy indexCopy{ .srcOffset = vertexBufferSize, .dstOffset = 0, .size = indexBufferSize };
+            vkCmdCopyBuffer(cmdBuffer, staging.buffer, outBuffer.indexBuffer.buffer, 1, &indexCopy);
+        });
+
+        destroyBuffer(_ctx->vma, staging);
+    }
 
 } // namespace ephemeral

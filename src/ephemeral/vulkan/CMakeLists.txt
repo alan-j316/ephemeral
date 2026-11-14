@@ -1,6 +1,7 @@
 # Add source to this project's executable.
 add_library(
         EphemeralRenderer_Internal STATIC
+        VkBuffer.cpp
         VkInitializer.cpp
         VkImages.cpp
         VkDescriptors.cpp
@@ -19,6 +20,8 @@ target_sources(
         VkEngine.h
 
         PRIVATE
+        Geometry.h
+        VkBuffer.h
         VkDescriptors.h
         VkImages.h
         VkInitializer.h
