@@ -42,6 +42,15 @@ namespace ephemeral
     };
 
 
+    struct ComputePushConstant
+    {
+        flcn::Vec4F data1;
+        flcn::Vec4F data2;
+        flcn::Vec4F data3;
+        flcn::Vec4F data4;
+    };
+
+
     // Main Engine Context(Used to remove header leakage)
     struct EphemeralEngineContext
     {
@@ -112,6 +121,12 @@ namespace ephemeral
         vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipeline);
         vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipelineLayout, 0, 1,
                                 &ctx.drawImageDescriptorSet, 0, nullptr);
+        // Add push constants
+        ComputePushConstant pc;
+        pc.data1 = flcn::Vec4F{ 1, 0, 0, 1 };
+        pc.data2 = flcn::Vec4F{ 0, 0, 1, 1 };
+        vkCmdPushConstants(cmdBuffer, ctx.gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+
         // Execute the compute shader
         vkCmdDispatch(cmdBuffer, std::ceil(ctx.drawExtent.width / 16.0), std::ceil(ctx.drawExtent.height / 16.0), 1);
     }
@@ -598,15 +613,17 @@ namespace ephemeral
 
     void EphemeralEngine::initBackgroundPipelines() noexcept
     {
-
         // ------------------------ PIPELINE LAYOUT ------------------------
+        VkPushConstantRange pushConstantRange{ .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                                               .offset     = 0,
+                                               .size       = sizeof(ComputePushConstant) };
         const VkPipelineLayoutCreateInfo pipelineLayoutInfo{ .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                                                              .pNext = nullptr,
                                                              .flags = 0,
                                                              .setLayoutCount = 1,
                                                              .pSetLayouts    = &_ctx->drawImageDescriptorSetLayout,
-                                                             .pushConstantRangeCount = 0,
-                                                             .pPushConstantRanges    = nullptr };
+                                                             .pushConstantRangeCount = 1,
+                                                             .pPushConstantRanges    = &pushConstantRange };
 
         VK_CHECK(
             vkCreatePipelineLayout(_ctx->device, &pipelineLayoutInfo, _ctx->allocator, &_ctx->gradientPipelineLayout));
@@ -614,7 +631,7 @@ namespace ephemeral
 
         // ------------------------ SHADER STAGE ------------------------
         VkShaderModule drawComputeShaderModule;
-        if (!vkutils::loadShaderModule("shaders/gradient.comp.spv", _ctx->device, _ctx->allocator,
+        if (!vkutils::loadShaderModule("shaders/gradient_color.comp.spv", _ctx->device, _ctx->allocator,
                                        &drawComputeShaderModule))
         {
             fmt::print("There was an error loading the shader module.");
