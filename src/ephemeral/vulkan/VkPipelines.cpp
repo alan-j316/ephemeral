@@ -170,7 +170,7 @@ namespace ephemeral
 
 
         // ------------------------ PIPELINE ------------------------
-        VkGraphicsPipelineCreateInfo graphicsPipelineInfo{ .sType      = VK_STRUCTURE_TYPE_PIPELINE_CREATE_INFO_KHR,
+        VkGraphicsPipelineCreateInfo graphicsPipelineInfo{ .sType      = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
                                                            .pNext      = &_renderingInfo,
                                                            .stageCount = static_cast<uint32_t>(_shaderStages.size()),
                                                            .pStages    = _shaderStages.data(),
