@@ -70,6 +70,10 @@ namespace ephemeral
         // ------------------------ VMA ------------------------
         VmaAllocator vma;
 
+        // ------------------------ DRAW RESOURCES ------------------------
+        VulkanImage drawImage;
+        VkExtent2D drawExtent;
+
 
         // ------------------------ ENGINE GLOBAL ------------------------
         DeletionQueue mainDeletionQueue;
@@ -101,20 +105,11 @@ namespace ephemeral
 
         // ------------------------ INITIALIZE VULKAN ------------------------
         initVulkan();
+        initVMA();
         initSwapChain();
         initCommands();
         initSyncStructures();
 
-        // ------------------------ INITIALIZE VMA ------------------------
-        VmaAllocatorCreateInfo vmaInfo{ .flags          = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
-                                        .physicalDevice = _ctx->gpu,
-                                        .device         = _ctx->device,
-                                        .instance       = _ctx->instance };
-        vmaCreateAllocator(&vmaInfo, &_ctx->vma);
-
-        _ctx->mainDeletionQueue.push([&]() {
-            vmaDestroyAllocator(_ctx->vma);
-        });
 
         // everything went fine
         _isInitialized = true;
@@ -168,6 +163,19 @@ namespace ephemeral
     }
 
 
+    inline static void drawBackground(const VkCommandBuffer cmdBuffer, const uint32_t frameNumber,
+                                      const EphemeralEngineContext& ctx) noexcept
+    {
+        // Create a frame number dependent clear color
+        const float flash = std::abs(std::sin(static_cast<float>(frameNumber) / 120.f));
+        const VkClearColorValue clearColor{ flash, flash, 0.0f, 1.0f };
+        const VkImageSubresourceRange clearRange = vkutils::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+
+        vkCmdClearColorImage(cmdBuffer, ctx.drawImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1,
+                             &clearRange);
+    }
+
+
     void EphemeralEngine::draw()
     {
         // ------------------------ WAITING & SWAP CHAIN IMAGE ACQUISITION ------------------------
@@ -199,18 +207,22 @@ namespace ephemeral
         VK_CHECK(vkBeginCommandBuffer(cmdBuffer, &cmdBeginInfo));
 
 
-        // Transition the swap chain image to a writeable layout
+        // Transition the draw image to a writeable layout
+        vkutils::transitionImage(cmdBuffer, _ctx->drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        // Draw to the 'draw' image.
+        drawBackground(cmdBuffer, _frameNumber, *_ctx);
+
+        vkutils::transitionImage(cmdBuffer, _ctx->drawImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        // Transition the swap chain image
         vkutils::transitionImage(cmdBuffer, _ctx->swapChainImages[swapChainImageIdx], VK_IMAGE_LAYOUT_UNDEFINED,
                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-        // Flashing Background color
-        const float flash = std::abs(std::sin(static_cast<float>(_frameNumber) / 120.f));
-        const VkClearColorValue clearValue{ flash, flash, 0.0f, 1.0f };
-        const VkImageSubresourceRange clearRange = vkutils::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+        // Blit the draw image to the swapchain image
+        vkutils::copyImageToImage(cmdBuffer, _ctx->drawImage.image, _ctx->swapChainImages[swapChainImageIdx],
+                                  _ctx->drawExtent, _ctx->swapChainExtent);
 
-        // Clear the color
-        vkCmdClearColorImage(cmdBuffer, _ctx->swapChainImages[swapChainImageIdx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             &clearValue, 1, &clearRange);
         // Transition layout optimal for presentation
         vkutils::transitionImage(cmdBuffer, _ctx->swapChainImages[swapChainImageIdx],
                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
@@ -219,11 +231,11 @@ namespace ephemeral
 
 
         // ------------------------ QUEUE SUBMISSION ------------------------
-        VkCommandBufferSubmitInfo cmdBufferSubmitInfo = vkutils::commandBufferSubmitInfo(cmdBuffer);
+        const VkCommandBufferSubmitInfo cmdBufferSubmitInfo = vkutils::commandBufferSubmitInfo(cmdBuffer);
 
-        VkSemaphoreSubmitInfo waitSemaphoreInfo =
+        const VkSemaphoreSubmitInfo waitSemaphoreInfo =
             vkutils::semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, swapChainSemaphore);
-        VkSemaphoreSubmitInfo renderSemaphoreInfo =
+        const VkSemaphoreSubmitInfo renderSemaphoreInfo =
             vkutils::semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, renderSemaphore);
 
         const VkSubmitInfo2 submitInfo =
@@ -348,7 +360,57 @@ namespace ephemeral
     }
 
 
-    void EphemeralEngine::initSwapChain() noexcept { createSwapChain(_windowExtent.width, _windowExtent.height); }
+    void EphemeralEngine::initVMA() noexcept
+    {
+        const VmaAllocatorCreateInfo vmaInfo{ .flags          = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+                                              .physicalDevice = _ctx->gpu,
+                                              .device         = _ctx->device,
+                                              .instance       = _ctx->instance };
+        vmaCreateAllocator(&vmaInfo, &_ctx->vma);
+
+        _ctx->mainDeletionQueue.push([&]() {
+            vmaDestroyAllocator(_ctx->vma);
+        });
+    }
+
+
+    void EphemeralEngine::initSwapChain() noexcept
+    {
+        createSwapChain(_windowExtent.width, _windowExtent.height);
+
+        // ------------------------ DRAW IMAGE ------------------------
+        auto& drawImage = _ctx->drawImage;
+
+        // Hardcode the format to draw 16-bit floats
+        drawImage.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+        drawImage.extent = { .width = _windowExtent.width, .height = _windowExtent.height, .depth = 1 };
+
+        // NOLINTNEXTLINE
+        VkImageUsageFlags drawImgUsage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        const VkImageCreateInfo drawImgInfo =
+            vkutils::imageCreateInfo(drawImage.format, drawImgUsage, drawImage.extent);
+
+        // Allocate memory
+        constexpr VmaAllocationCreateInfo drawImgAllocInfo{ .usage         = VMA_MEMORY_USAGE_GPU_ONLY,
+                                                            .requiredFlags = static_cast<VkMemoryPropertyFlags>(
+                                                                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) };
+
+        // Allocate the image
+        vmaCreateImage(_ctx->vma, &drawImgInfo, &drawImgAllocInfo, &drawImage.image, &drawImage.allocation, nullptr);
+
+        // ImageView
+        const VkImageViewCreateInfo drawImgViewInfo =
+            vkutils::imageviewCreateInfo(drawImage.format, drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
+        VK_CHECK(vkCreateImageView(_ctx->device, &drawImgViewInfo, _ctx->allocator, &drawImage.imageView));
+
+        // Add to the deletion queue
+        _ctx->mainDeletionQueue.push([&] {
+            vkDestroyImageView(_ctx->device, drawImage.imageView, _ctx->allocator);
+            vmaDestroyImage(_ctx->vma, drawImage.image, drawImage.allocation);
+        });
+    }
 
 
     void EphemeralEngine::initCommands() noexcept
@@ -416,6 +478,7 @@ namespace ephemeral
             vkDestroyImageView(_ctx->device, imgView, _ctx->allocator);
         }
     }
+
 
     FrameData& EphemeralEngine::currentFrame() const noexcept { return _ctx->frames[_frameNumber % FRAME_OVERLAP]; }
 

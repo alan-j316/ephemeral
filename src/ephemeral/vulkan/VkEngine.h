@@ -7,10 +7,7 @@
 
 
 /// Forward declarations
-// clang-tidy off
 struct SDL_Window; // NOLINT(readability-identifier-naming)
-// clang format on
-
 
 namespace ephemeral
 {
@@ -55,6 +52,8 @@ namespace ephemeral
 
     private:
         void initVulkan() noexcept;
+
+        void initVMA() noexcept;
 
         void initSwapChain() noexcept;
 
