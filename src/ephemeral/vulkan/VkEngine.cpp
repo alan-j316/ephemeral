@@ -108,13 +108,6 @@ namespace ephemeral
     inline static void drawBackground(const VkCommandBuffer cmdBuffer, const uint32_t frameNumber,
                                       const EphemeralEngineContext& ctx) noexcept
     {
-        // Create a frame number dependent clear color
-        // const float flash = std::abs(std::sin(static_cast<float>(frameNumber) / 120.f));
-        // const VkClearColorValue clearColor{ flash, flash, 0.0f, 1.0f };
-        // const VkImageSubresourceRange clearRange = vkutils::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-        //
-        // vkCmdClearColorImage(cmdBuffer, ctx.drawImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1,
-        //                      &clearRange);
         // Bind the pipeline and descriptor sets
         vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipeline);
         vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipelineLayout, 0, 1,
@@ -148,6 +141,19 @@ namespace ephemeral
         const VkSubmitInfo2 submitInfo = vkutils::submitInfo(&cmdBufferSubmitInfo, nullptr, nullptr);
         VK_CHECK(vkQueueSubmit2(ctx.graphicsQueue, 1, &submitInfo, ctx.immFence));
         VK_CHECK(vkWaitForFences(ctx.device, 1, &ctx.immFence, true, TIMEOUT));
+    }
+
+
+    inline static void drawImGui(const VkCommandBuffer cmdBuffer, const VkImageView targetImageView,
+                                 const EphemeralEngineContext& ctx) noexcept
+    {
+        const VkRenderingAttachmentInfo colorAttachment =
+            vkutils::attachmentInfo(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const VkRenderingInfo renderInfo = vkutils::renderingInfo(ctx.swapChainExtent, &colorAttachment, nullptr);
+
+        vkCmdBeginRendering(cmdBuffer, &renderInfo);
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmdBuffer);
+        vkCmdEndRendering(cmdBuffer);
     }
 
 
@@ -291,9 +297,15 @@ namespace ephemeral
         vkutils::copyImageToImage(cmdBuffer, _ctx->drawImage.image, _ctx->swapChainImages[swapChainImageIdx],
                                   _ctx->drawExtent, _ctx->swapChainExtent);
 
+        // Transition layout optimal for rendering
+        vkutils::transitionImage(cmdBuffer, _ctx->swapChainImages[swapChainImageIdx],
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+        drawImGui(cmdBuffer, _ctx->swapChainImageViews[swapChainImageIdx], *_ctx);
+
         // Transition layout optimal for presentation
         vkutils::transitionImage(cmdBuffer, _ctx->swapChainImages[swapChainImageIdx],
-                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         // End recording
         vkEndCommandBuffer(cmdBuffer);
 
@@ -338,6 +350,7 @@ namespace ephemeral
             // Handle events on queue
             while (SDL_PollEvent(&e) != 0)
             {
+                ImGui_ImplSDL3_ProcessEvent(&e);
                 // close the window when user alt-f4s or clicks the X button
                 if (e.type == SDL_EVENT_QUIT)
                 {
@@ -725,8 +738,8 @@ namespace ephemeral
 
         // Deletion Queue
         _ctx->mainDeletionQueue.push([&] {
-            vkDestroyDescriptorPool(_ctx->device, _ctx->imguiPool, _ctx->allocator);
             ImGui_ImplVulkan_Shutdown();
+            vkDestroyDescriptorPool(_ctx->device, _ctx->imguiPool, _ctx->allocator);
         });
     }
 
