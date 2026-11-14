@@ -50,6 +50,16 @@ namespace ephemeral
         flcn::Vec4F data4;
     };
 
+    struct ComputeEffect
+    {
+        std::string name;
+
+        VkPipeline pipeline;
+        VkPipelineLayout pipelineLayout;
+
+        ComputePushConstant data;
+    };
+
 
     // Main Engine Context(Used to remove header leakage)
     struct EphemeralEngineContext
@@ -107,6 +117,10 @@ namespace ephemeral
 
         // ------------------------ ENGINE GLOBAL ------------------------
         DeletionQueue mainDeletionQueue;
+
+        // ------------------------ ENGINE GLOBAL ------------------------
+        std::vector<ComputeEffect> bgEffects{};
+        int currentBgEffect{ 0 };
     };
 
     /// +---------------------------------------------------------------------------------------+
@@ -122,10 +136,9 @@ namespace ephemeral
         vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipelineLayout, 0, 1,
                                 &ctx.drawImageDescriptorSet, 0, nullptr);
         // Add push constants
-        ComputePushConstant pc;
-        pc.data1 = flcn::Vec4F{ 1, 0, 0, 1 };
-        pc.data2 = flcn::Vec4F{ 0, 0, 1, 1 };
-        vkCmdPushConstants(cmdBuffer, ctx.gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        const ComputeEffect& effect = ctx.bgEffects[ctx.currentBgEffect];
+        vkCmdPushConstants(cmdBuffer, ctx.gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(effect.data),
+                           &effect.data);
 
         // Execute the compute shader
         vkCmdDispatch(cmdBuffer, std::ceil(ctx.drawExtent.width / 16.0), std::ceil(ctx.drawExtent.height / 16.0), 1);
@@ -396,7 +409,19 @@ namespace ephemeral
             ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
 
-            ImGui::ShowDemoWindow();
+            if (ImGui::Begin("background"))
+            {
+                ComputeEffect& effect = _ctx->bgEffects[_ctx->currentBgEffect];
+                ImGui::Text("Selected effect: %s", effect.name.c_str());
+                ImGui::SliderInt("Effect Index", &_ctx->currentBgEffect, 0,
+                                 static_cast<int>(_ctx->bgEffects.size()) - 1);
+                ImGui::InputFloat4("Data 1", reinterpret_cast<float*>(&effect.data.data1));
+                ImGui::InputFloat4("Data 2", reinterpret_cast<float*>(&effect.data.data2));
+                ImGui::InputFloat4("Data 3", reinterpret_cast<float*>(&effect.data.data3));
+                ImGui::InputFloat4("Data 4", reinterpret_cast<float*>(&effect.data.data4));
+            }
+            ImGui::End();
+
             ImGui::Render();
 
             draw();
@@ -630,11 +655,17 @@ namespace ephemeral
 
 
         // ------------------------ SHADER STAGE ------------------------
-        VkShaderModule drawComputeShaderModule;
+        VkShaderModule gradientShader;
         if (!vkutils::loadShaderModule("shaders/gradient_color.comp.spv", _ctx->device, _ctx->allocator,
-                                       &drawComputeShaderModule))
+                                       &gradientShader))
         {
-            fmt::print("There was an error loading the shader module.");
+            fmt::print("There was an error loading the color gradient shader module.");
+        }
+
+        VkShaderModule skyShader;
+        if (!vkutils::loadShaderModule("shaders/sky.comp.spv", _ctx->device, _ctx->allocator, &skyShader))
+        {
+            fmt::print("There was an error loading the sky shader module.");
         }
 
         const VkPipelineShaderStageCreateInfo shaderStageInfo{ .sType =
@@ -642,22 +673,42 @@ namespace ephemeral
                                                                .pNext  = nullptr,
                                                                .flags  = 0,
                                                                .stage  = VK_SHADER_STAGE_COMPUTE_BIT,
-                                                               .module = drawComputeShaderModule,
+                                                               .module = gradientShader,
                                                                .pName  = "main" };
 
 
         // ------------------------ PIPELINE ------------------------
-        const VkComputePipelineCreateInfo computePipelineInfo{ .sType  = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-                                                               .pNext  = nullptr,
-                                                               .flags  = 0,
-                                                               .stage  = shaderStageInfo,
-                                                               .layout = _ctx->gradientPipelineLayout };
+        VkComputePipelineCreateInfo computePipelineInfo{ .sType  = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+                                                         .pNext  = nullptr,
+                                                         .flags  = 0,
+                                                         .stage  = shaderStageInfo,
+                                                         .layout = _ctx->gradientPipelineLayout };
+
+        ComputeEffect gradient;
+        gradient.pipelineLayout = _ctx->gradientPipelineLayout;
+        gradient.name           = "gradient";
+        gradient.data           = {};
+        gradient.data.data1     = { 1, 0, 0, 1 };
+        gradient.data.data2     = { 0, 0, 1, 1 };
 
         VK_CHECK(vkCreateComputePipelines(_ctx->device, VK_NULL_HANDLE, 1, &computePipelineInfo, _ctx->allocator,
                                           &_ctx->gradientPipeline));
 
+        computePipelineInfo.stage.module = skyShader;
+
+        ComputeEffect sky;
+        sky.pipelineLayout = _ctx->gradientPipelineLayout;
+        sky.name           = "sky";
+        sky.data           = {};
+        sky.data.data1     = { 0.1f, 0.2f, 0.4f, 0.97f };
+
+        _ctx->bgEffects.push_back(gradient);
+        _ctx->bgEffects.push_back(sky);
+
+
         // We can create the shader module after its bound to the pipeline
-        vkDestroyShaderModule(_ctx->device, drawComputeShaderModule, _ctx->allocator);
+        vkDestroyShaderModule(_ctx->device, skyShader, _ctx->allocator);
+        vkDestroyShaderModule(_ctx->device, gradientShader, _ctx->allocator);
 
         // Add the pipeline layout and pipeline to the deletion queue
         _ctx->mainDeletionQueue.push([&] {
