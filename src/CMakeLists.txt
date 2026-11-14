@@ -27,14 +27,14 @@ target_link_libraries(
 find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
 
 file(GLOB_RECURSE GLSL_SOURCE_FILES
-        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.frag"
-        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.vert"
-        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.comp"
+        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.frag.glsl"
+        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.vert.glsl"
+        "${CMAKE_CURRENT_LIST_DIR}/shaders/*.comp.glsl"
 )
 
 foreach (GLSL ${GLSL_SOURCE_FILES})
     message(STATUS "BUILDING SHADER")
-    get_filename_component(FILE_NAME ${GLSL} NAME)
+    get_filename_component(FILE_NAME ${GLSL} NAME_WLE)
     set(SPIRV_DIR "$<TARGET_FILE_DIR:${ENGINE_NAME}>/shaders")
     set(SPIRV "${SPIRV_DIR}/${FILE_NAME}.spv")
     message(STATUS ${GLSL})
