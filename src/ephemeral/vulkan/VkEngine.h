@@ -71,6 +71,8 @@ namespace ephemeral
 
         void destroySwapChain() const;
 
+        void initImgui() noexcept;
+
 
         [[nodiscard]] struct FrameData& currentFrame() const noexcept; // NOLINT(readability-identifier-naming)
     };

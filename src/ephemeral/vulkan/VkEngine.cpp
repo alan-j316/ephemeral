@@ -23,6 +23,9 @@
 #include <cassert>
 #include <chrono>
 #include <ephemeral/utils/DeletionQueue.h>
+#include <imgui.h>
+#include <imgui_impl_sdl3.h>
+#include <imgui_impl_vulkan.h>
 #include <thread>
 
 
@@ -85,15 +88,75 @@ namespace ephemeral
         VkPipelineLayout gradientPipelineLayout;
         VkPipeline gradientPipeline;
 
+        // ------------------------ IMMEDIATE SUBMITS ------------------------
+        VkFence immFence;
+        VkCommandBuffer immCmdBuffer;
+        VkCommandPool immCmdPool;
+
+        // ------------------------ IMGUI ------------------------
+        VkDescriptorPool imguiPool;
 
         // ------------------------ ENGINE GLOBAL ------------------------
         DeletionQueue mainDeletionQueue;
     };
 
+    /// +---------------------------------------------------------------------------------------+
+    /// |                              STATIC FUNCTIONS                                         |
+    /// +---------------------------------------------------------------------------------------+
+
+
+    inline static void drawBackground(const VkCommandBuffer cmdBuffer, const uint32_t frameNumber,
+                                      const EphemeralEngineContext& ctx) noexcept
+    {
+        // Create a frame number dependent clear color
+        // const float flash = std::abs(std::sin(static_cast<float>(frameNumber) / 120.f));
+        // const VkClearColorValue clearColor{ flash, flash, 0.0f, 1.0f };
+        // const VkImageSubresourceRange clearRange = vkutils::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+        //
+        // vkCmdClearColorImage(cmdBuffer, ctx.drawImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1,
+        //                      &clearRange);
+        // Bind the pipeline and descriptor sets
+        vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipeline);
+        vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipelineLayout, 0, 1,
+                                &ctx.drawImageDescriptorSet, 0, nullptr);
+        // Execute the compute shader
+        vkCmdDispatch(cmdBuffer, std::ceil(ctx.drawExtent.width / 16.0), std::ceil(ctx.drawExtent.height / 16.0), 1);
+    }
+
+
+    inline static void immediateSubmit(const EphemeralEngineContext& ctx,
+                                       std::function<void(VkCommandBuffer cmdBuffer)>&& func) noexcept
+    {
+        // ------------------------ RESET FENCE AND COMMAND BUFFER ------------------------
+        VK_CHECK(vkResetFences(ctx.device, 1, &ctx.immFence));
+        VK_CHECK(vkResetCommandBuffer(ctx.immCmdBuffer, 0));
+
+        const VkCommandBuffer cmdBuffer = ctx.immCmdBuffer;
+
+
+        // ------------------------ RECORD ------------------------
+        const VkCommandBufferBeginInfo cmdBeginInfo =
+            vkutils::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+        VK_CHECK(vkBeginCommandBuffer(cmdBuffer, &cmdBeginInfo));
+        func(cmdBuffer);
+        VK_CHECK(vkEndCommandBuffer(cmdBuffer));
+
+
+        // ------------------------ SUBMIT ------------------------
+        const VkCommandBufferSubmitInfo cmdBufferSubmitInfo = vkutils::commandBufferSubmitInfo(cmdBuffer);
+        const VkSubmitInfo2 submitInfo = vkutils::submitInfo(&cmdBufferSubmitInfo, nullptr, nullptr);
+        VK_CHECK(vkQueueSubmit2(ctx.graphicsQueue, 1, &submitInfo, ctx.immFence));
+        VK_CHECK(vkWaitForFences(ctx.device, 1, &ctx.immFence, true, TIMEOUT));
+    }
+
+
+
+    /// +---------------------------------------------------------------------------------------+
+    /// |                             MEMBER FUNCTIONS                                          |
+    /// +---------------------------------------------------------------------------------------+
 
     EphemeralEngine* g_loadedEngine = nullptr;
-
-
     EphemeralEngine& EphemeralEngine::get() { return *g_loadedEngine; }
 
 
@@ -122,6 +185,9 @@ namespace ephemeral
         initSyncStructures();
         initDescriptors();
         initPipelines();
+
+
+        initImgui();
 
 
         // everything went fine
@@ -173,25 +239,6 @@ namespace ephemeral
             // Free the context
             delete _ctx;
         }
-    }
-
-
-    inline static void drawBackground(const VkCommandBuffer cmdBuffer, const uint32_t frameNumber,
-                                      const EphemeralEngineContext& ctx) noexcept
-    {
-        // Create a frame number dependent clear color
-        // const float flash = std::abs(std::sin(static_cast<float>(frameNumber) / 120.f));
-        // const VkClearColorValue clearColor{ flash, flash, 0.0f, 1.0f };
-        // const VkImageSubresourceRange clearRange = vkutils::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-        //
-        // vkCmdClearColorImage(cmdBuffer, ctx.drawImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1,
-        //                      &clearRange);
-        // Bind the pipeline and descriptor sets
-        vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipeline);
-        vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, ctx.gradientPipelineLayout, 0, 1,
-                                &ctx.drawImageDescriptorSet, 0, nullptr);
-        // Execute the compute shader
-        vkCmdDispatch(cmdBuffer, std::ceil(ctx.drawExtent.width / 16.0), std::ceil(ctx.drawExtent.height / 16.0), 1);
     }
 
 
@@ -316,6 +363,14 @@ namespace ephemeral
                 continue;
             }
 
+            // ------------------------ IMGUI ------------------------
+            ImGui_ImplVulkan_NewFrame();
+            ImGui_ImplSDL3_NewFrame();
+            ImGui::NewFrame();
+
+            ImGui::ShowDemoWindow();
+            ImGui::Render();
+
             draw();
         }
     }
@@ -436,6 +491,7 @@ namespace ephemeral
 
     void EphemeralEngine::initCommands() noexcept
     {
+        // ------------------------ DRAW COMMANDS ------------------------
         const VkCommandPoolCreateInfo commandPoolInfo =
             vkutils::commandPoolCreateInfo(_ctx->graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
         for (size_t i = 0; i < FRAME_OVERLAP; ++i)
@@ -444,6 +500,17 @@ namespace ephemeral
             VkCommandBufferAllocateInfo cmdBufferInfo = vkutils::commandBufferAllocateInfo(_ctx->frames[i].cmdPool, 1);
             VK_CHECK(vkAllocateCommandBuffers(_ctx->device, &cmdBufferInfo, &_ctx->frames[i].mainCmdBuffer));
         }
+
+
+        // ------------------------ IMMEDIATE MODE COMMANDS ------------------------
+        VK_CHECK(vkCreateCommandPool(_ctx->device, &commandPoolInfo, _ctx->allocator, &_ctx->immCmdPool));
+
+        const VkCommandBufferAllocateInfo immCmdAllocInfo = vkutils::commandBufferAllocateInfo(_ctx->immCmdPool, 1);
+        VK_CHECK(vkAllocateCommandBuffers(_ctx->device, &immCmdAllocInfo, &_ctx->immCmdBuffer));
+
+        _ctx->mainDeletionQueue.push([&] {
+            vkDestroyCommandPool(_ctx->device, _ctx->immCmdPool, _ctx->allocator);
+        });
     }
 
 
@@ -465,6 +532,12 @@ namespace ephemeral
             VK_CHECK(
                 vkCreateSemaphore(_ctx->device, &semaphoreCreateInfo, _ctx->allocator, &_ctx->renderSemaphores[i]));
         }
+
+        // ------------------------ IMMEDIATE MODE ------------------------
+        VK_CHECK(vkCreateFence(_ctx->device, &fenceCreateInfo, _ctx->allocator, &_ctx->immFence));
+        _ctx->mainDeletionQueue.push([&] {
+            vkDestroyFence(_ctx->device, _ctx->immFence, _ctx->allocator);
+        });
     }
 
 
@@ -594,6 +667,67 @@ namespace ephemeral
         {
             vkDestroyImageView(_ctx->device, imgView, _ctx->allocator);
         }
+    }
+
+
+    void EphemeralEngine::initImgui() noexcept
+    {
+        // ------------------------ SETUP DESCRIPTOR POOLS ------------------------
+        constexpr std::array poolSizes{
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = 1000 },
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1000 },
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .descriptorCount = 1000 },
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = 1000 },
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, .descriptorCount = 1000 },
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, .descriptorCount = 1000 },
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 1000 },
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1000 },
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .descriptorCount = 1000 },
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, .descriptorCount = 1000 },
+            VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, .descriptorCount = 1000 },
+        };
+
+        const VkDescriptorPoolCreateInfo poolInfo{ .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                                                   .pNext         = nullptr,
+                                                   .flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+                                                   .maxSets       = 1000,
+                                                   .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+                                                   .pPoolSizes    = poolSizes.data() };
+
+        VK_CHECK(vkCreateDescriptorPool(_ctx->device, &poolInfo, _ctx->allocator, &_ctx->imguiPool));
+
+
+        // ------------------------ SETUP IMGUI LIBRARY ------------------------
+        ImGui::CreateContext();
+        ImGui_ImplSDL3_InitForVulkan(_window);
+
+        const VkPipelineRenderingCreateInfo imguiPipelineInfo{
+            .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount    = 1,
+            .pColorAttachmentFormats = &_ctx->swapChainImageFormat,
+        };
+
+        ImGui_ImplVulkan_InitInfo vkImguiInfo{ .ApiVersion          = VK_API_VERSION_1_3,
+                                               .Instance            = _ctx->instance,
+                                               .PhysicalDevice      = _ctx->gpu,
+                                               .Device              = _ctx->device,
+                                               .QueueFamily         = _ctx->graphicsQueueFamily,
+                                               .Queue               = _ctx->graphicsQueue,
+                                               .DescriptorPool      = _ctx->imguiPool,
+                                               .MinImageCount       = 3,
+                                               .ImageCount          = 3,
+                                               .UseDynamicRendering = true,
+                                               .Allocator           = _ctx->allocator };
+        vkImguiInfo.PipelineInfoMain.MSAASamples                 = VK_SAMPLE_COUNT_1_BIT;
+        vkImguiInfo.PipelineInfoMain.PipelineRenderingCreateInfo = imguiPipelineInfo;
+
+        ImGui_ImplVulkan_Init(&vkImguiInfo);
+
+        // Deletion Queue
+        _ctx->mainDeletionQueue.push([&] {
+            vkDestroyDescriptorPool(_ctx->device, _ctx->imguiPool, _ctx->allocator);
+            ImGui_ImplVulkan_Shutdown();
+        });
     }
 
 
