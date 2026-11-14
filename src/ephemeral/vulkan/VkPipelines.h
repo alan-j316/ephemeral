@@ -14,9 +14,63 @@
 namespace ephemeral
 {
 
+    class PipelineBuilder
+    {
+    public:
+        PipelineBuilder() { clear(); }
+
+        /// Set the fragment and vertex shader stages.
+        /// @note Entry point for both the shaders are assumed to be "main".
+        void setShaderStages(VkShaderModule vertexShader, VkShaderModule fragmentShader) noexcept;
+
+
+        /// Set rendering primitive topology.
+        void setTopology(VkPrimitiveTopology topology) noexcept;
+
+        /// Set the polygon mode(Fill/Line/Point)
+        void setPolygonMode(VkPolygonMode mode) noexcept;
+
+        /// Set the cull mode and front face orientation(CW/CCW)
+        void setCullMode(VkCullModeFlags cullMode, VkFrontFace frontFace) noexcept;
+
+        /// Disable MSAA
+        void disableMSAA() noexcept;
+
+        /// Disable alpha blending
+        void disableBlending() noexcept;
+
+        /// Set the color attachment format for the pipeline.
+        void setColorAttachmentFormat(VkFormat format) noexcept;
+
+        /// Set the depth attachment format for the pipeline.
+        void setDepthAttachmentFormat(VkFormat format) noexcept;
+
+        /// Disable depth testing.
+        void disableDepthTest() noexcept;
+
+
+        /// Build the pipeline.
+        [[nodiscard]] VkPipeline build(VkDevice device, const VkAllocationCallbacks* pAllocator) noexcept;
+
+
+        /// Clear all pipeline configurations to default values.
+        void clear() noexcept;
+
+    private:
+        std::vector<VkPipelineShaderStageCreateInfo> _shaderStages;
+        VkPipelineInputAssemblyStateCreateInfo _inputAssembly{};
+        VkPipelineRasterizationStateCreateInfo _rasterizer{};
+        VkPipelineColorBlendAttachmentState _colorBlendAttachment{};
+        VkPipelineMultisampleStateCreateInfo _multisampling{ .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT };
+        VkPipelineLayout _pipelineLayout{};
+        VkPipelineDepthStencilStateCreateInfo _depthStencil{};
+        VkPipelineRenderingCreateInfo _renderingInfo{};
+        VkFormat _colorAttachmentFormat{};
+    };
+
     namespace vkutils
     {
         bool loadShaderModule(const char* filePath, VkDevice device, const VkAllocationCallbacks* pAllocator,
                               VkShaderModule* outShaderModule) noexcept;
     }
-}
+} // namespace ephemeral

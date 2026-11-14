@@ -656,14 +656,14 @@ namespace ephemeral
 
         // ------------------------ SHADER STAGE ------------------------
         VkShaderModule gradientShader;
-        if (!vkutils::loadShaderModule("shaders/gradient_color.comp.spv", _ctx->device, _ctx->allocator,
+        if (!vkutils::loadShaderModule("shaders/GradientColor.comp.spv", _ctx->device, _ctx->allocator,
                                        &gradientShader))
         {
             fmt::print("There was an error loading the color gradient shader module.");
         }
 
         VkShaderModule skyShader;
-        if (!vkutils::loadShaderModule("shaders/sky.comp.spv", _ctx->device, _ctx->allocator, &skyShader))
+        if (!vkutils::loadShaderModule("shaders/Sky.comp.spv", _ctx->device, _ctx->allocator, &skyShader))
         {
             fmt::print("There was an error loading the sky shader module.");
         }
