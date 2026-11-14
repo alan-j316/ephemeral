@@ -20,6 +20,7 @@
 #include <cassert>
 #include <chrono>
 #include <thread>
+#include <ephemeral/utils/DeletionQueue.h>
 
 namespace ephemeral
 {

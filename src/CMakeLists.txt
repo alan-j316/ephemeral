@@ -8,6 +8,9 @@ target_include_directories(
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 
+set(EPHEMERAL_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+
 add_subdirectory(ephemeral/vulkan)
 add_subdirectory(ephemeral/utils)
 
@@ -18,7 +21,6 @@ target_link_libraries(
         EphemeralUtils_Internal
 )
 
-set(EPHEMERAL_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 # ------- SHADER COMPILATION(vkguide.dev) ---------------
 
