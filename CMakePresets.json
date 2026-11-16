@@ -16,8 +16,7 @@
                 }
             },
             "cacheVariables": {
-                "ENABLE_STRICT": "ON",
-                "ENABLE_TEST": "ON"
+                "ENABLE_STRICT": "ON"
             }
         },
         {
