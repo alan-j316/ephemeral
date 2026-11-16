@@ -194,9 +194,8 @@ namespace ephemeral
         // vkCmdDrawIndexed(cmdBuffer, 6, 1, 0, 0, 0);
         //
         const auto mesh = ctx.testMeshes[2];
-        const GPUDrawPushConstants pc {
-            .worldMatrix = flcn::Mat4F::identity(),.vertexBuffer = mesh->meshBuffers.vertexBufferAddress
-        };
+        const GPUDrawPushConstants pc{ .worldMatrix  = flcn::Mat4F::identity(),
+                                       .vertexBuffer = mesh->meshBuffers.vertexBufferAddress };
         vkCmdPushConstants(cmdBuffer, ctx.meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
         vkCmdBindIndexBuffer(cmdBuffer, mesh->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(cmdBuffer, mesh->surfaces[0].count, 1, mesh->surfaces[0].startIndex, 0, 0);
@@ -509,12 +508,12 @@ namespace ephemeral
         // ------------------------ INSTANCE CREATION ------------------------
         vkb::InstanceBuilder builder;
 
-        auto instanceResult = builder.set_app_name(_appName)
-                                  .set_engine_name(ENGINE_NAME)
-                                  .request_validation_layers(VALIDATION_LAYERS_ENABLED)
-                                  .require_api_version(1, 3, 0)
-                                  .set_allocation_callbacks(_ctx->allocator)
-                                  .build();
+        auto instanceResult       = builder.set_app_name(_appName)
+                                        .set_engine_name(ENGINE_NAME)
+                                        .request_validation_layers(VALIDATION_LAYERS_ENABLED)
+                                        .require_api_version(1, 3, 0)
+                                        .set_allocation_callbacks(_ctx->allocator)
+                                        .build();
         vkb::Instance vkbInstance = instanceResult.value();
 
         _ctx->instance       = vkbInstance.instance;
@@ -1016,6 +1015,14 @@ namespace ephemeral
 
         // TEST MESH
         _ctx->testMeshes = loadGltfMeshes(*this, "assets/basicmesh.glb").value();
+
+        _ctx->mainDeletionQueue.push([&] {
+            for (auto&& mesh : _ctx->testMeshes)
+            {
+                destroyBuffer(_ctx->vma, mesh->meshBuffers.indexBuffer);
+                destroyBuffer(_ctx->vma, mesh->meshBuffers.vertexBuffer);
+            }
+        });
     }
 
 
