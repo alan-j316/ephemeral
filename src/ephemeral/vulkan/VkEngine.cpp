@@ -868,7 +868,7 @@ namespace ephemeral
         pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
         pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         pipelineBuilder.disableMSAA();
-        pipelineBuilder.disableBlending();
+        pipelineBuilder.enableAdditiveBlending();
         pipelineBuilder.setDepthTestState(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
         pipelineBuilder.setColorAttachmentFormat(_ctx->drawImage.format);

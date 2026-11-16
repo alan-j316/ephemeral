@@ -48,16 +48,20 @@ namespace ephemeral
         /// Disable depth testing.
         void setDepthTestState(bool depthWriteEnable, VkCompareOp op) noexcept;
 
-
         /// Build the pipeline.
         [[nodiscard]] VkPipeline build(VkDevice device, const VkAllocationCallbacks* pAllocator) noexcept;
-
 
         /// Clear all pipeline configurations to default values.
         void clear() noexcept;
 
         /// Set the pipeline layout for the current pipeline.
         void setPipelineLayout(VkPipelineLayout layout) noexcept;
+
+        /// Enable additive blending.
+        void enableAdditiveBlending() noexcept;
+
+        /// Enable alpha blending.
+        void enableAlphaBlending() noexcept;
 
     private:
         std::vector<VkPipelineShaderStageCreateInfo> _shaderStages;
