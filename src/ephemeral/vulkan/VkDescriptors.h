@@ -52,4 +52,34 @@ namespace ephemeral
         /// Destroy the descriptor pool.
         void destroyPool(VkDevice device, const VkAllocationCallbacks* pAllocator) const noexcept;
     };
+
+
+    struct DescriptorAllocatorResizable
+    {
+        struct PoolSizeRatio
+        {
+            VkDescriptorType type;
+            float ratio;
+        };
+
+
+        void init(VkDevice device, const VkAllocationCallbacks* pAllocator, uint32_t maxSets,
+                  std::span<PoolSizeRatio> poolRatios) noexcept;
+
+        void clear(VkDevice device) noexcept;
+
+        void destroy(VkDevice device, const VkAllocationCallbacks* pAllocator) noexcept;
+
+        VkDescriptorSet allocate(VkDevice device, VkDescriptorSetLayout layout, const VkAllocationCallbacks* pAllocator, void* pNext = nullptr);
+
+    private:
+        VkDescriptorPool getPool(VkDevice device, const VkAllocationCallbacks* pAllocator) noexcept;
+        VkDescriptorPool createPool(VkDevice device, uint32_t setCount, std::span<PoolSizeRatio> poolRatios,
+                                    const VkAllocationCallbacks* pAllocator) noexcept;
+
+        std::vector<PoolSizeRatio> _ratios;
+        std::vector<VkDescriptorPool> _fullPools;
+        std::vector<VkDescriptorPool> _readyPools;
+        uint32_t _setsPerPool{};
+    };
 } // namespace ephemeral
