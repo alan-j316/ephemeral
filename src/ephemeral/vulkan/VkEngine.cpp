@@ -120,8 +120,6 @@ namespace ephemeral
         // ------------------------ PIPELINES ------------------------
         VkPipelineLayout gradientPipelineLayout;
         VkPipeline gradientPipeline;
-        VkPipelineLayout trianglePipelineLayout;
-        VkPipeline trianglePipeline;
         VkPipelineLayout meshPipelineLayout;
         VkPipeline meshPipeline;
 
@@ -181,8 +179,6 @@ namespace ephemeral
         const VkRenderingInfo renderingInfo =
             vkutils::renderingInfo(ctx.drawExtent, &colorAttachment, &depthAttachment);
 
-        vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.trianglePipeline);
-
         vkCmdBeginRendering(cmdBuffer, &renderingInfo);
 
 
@@ -201,16 +197,9 @@ namespace ephemeral
 
 
         // ------------------------ RENDER ------------------------
-        vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
 
         vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipeline);
 
-        // const GPUDrawPushConstants pc{ .worldMatrix  = flcn::Mat4F::identity(),
-        //                                .vertexBuffer = ctx.rectangle.vertexBufferAddress };
-        // vkCmdPushConstants(cmdBuffer, ctx.meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-        // vkCmdBindIndexBuffer(cmdBuffer, ctx.rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-        // vkCmdDrawIndexed(cmdBuffer, 6, 1, 0, 0, 0);
-        //
         flcn::Mat4F view  = flcn::Mat4F::identity();
         view(2, 3)        = -4;
         float aspectRatio = static_cast<float>(ctx.drawExtent.width) / static_cast<float>(ctx.drawExtent.height);
@@ -755,7 +744,6 @@ namespace ephemeral
     void EphemeralEngine::initPipelines() noexcept
     {
         initBackgroundPipelines();
-        initTrianglePipelines();
         initMeshPipelines();
     }
 
@@ -838,54 +826,6 @@ namespace ephemeral
         _ctx->mainDeletionQueue.push([&] {
             vkDestroyPipelineLayout(_ctx->device, _ctx->gradientPipelineLayout, _ctx->allocator);
             vkDestroyPipeline(_ctx->device, _ctx->gradientPipeline, _ctx->allocator);
-        });
-    }
-
-
-    void EphemeralEngine::initTrianglePipelines() noexcept
-    {
-        // ------------------------ SHADER MODULES ------------------------
-        VkShaderModule triVertShader, triFragShader;
-        if (!vkutils::loadShaderModule("shaders/ColoredTriangle.vert.spv", _ctx->device, _ctx->allocator,
-                                       &triVertShader))
-        {
-            fmt::println("There was an error creating the triangle vertex shader");
-            return;
-        }
-
-        if (!vkutils::loadShaderModule("shaders/ColoredTriangle.frag.spv", _ctx->device, _ctx->allocator,
-                                       &triFragShader))
-        {
-            fmt::println("There was an error creating the triangle fragment shader");
-            return;
-        }
-
-        const VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkutils::pipelineLayoutCreateInfo();
-        VK_CHECK(
-            vkCreatePipelineLayout(_ctx->device, &pipelineLayoutInfo, _ctx->allocator, &_ctx->trianglePipelineLayout));
-
-
-        // ------------------------ PIPELINE BUILD ------------------------
-        PipelineBuilder builder;
-        builder.setPipelineLayout(_ctx->trianglePipelineLayout);
-        builder.setShaderStages(triVertShader, triFragShader);
-        builder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        builder.setPolygonMode(VK_POLYGON_MODE_FILL);
-        builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-        builder.disableMSAA();
-        builder.disableBlending();
-        builder.setDepthTestState(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-        builder.setColorAttachmentFormat(_ctx->drawImage.format);
-        builder.setDepthAttachmentFormat(_ctx->depthImage.format);
-        _ctx->trianglePipeline = builder.build(_ctx->device, _ctx->allocator);
-
-        // ------------------------ CLEANUP ------------------------
-        vkDestroyShaderModule(_ctx->device, triVertShader, _ctx->allocator);
-        vkDestroyShaderModule(_ctx->device, triFragShader, _ctx->allocator);
-
-        _ctx->mainDeletionQueue.push([&] {
-            vkDestroyPipelineLayout(_ctx->device, _ctx->trianglePipelineLayout, _ctx->allocator);
-            vkDestroyPipeline(_ctx->device, _ctx->trianglePipeline, _ctx->allocator);
         });
     }
 
@@ -1043,26 +983,6 @@ namespace ephemeral
 
     void EphemeralEngine::initDefaultData() noexcept
     {
-        std::array<Vertex, 4> rectVertices;
-        rectVertices[0].position = { 0.5f, -0.5f, 0.0f };
-        rectVertices[1].position = { 0.5f, 0.5f, 0.0f };
-        rectVertices[2].position = { -0.5f, -0.5f, 0.0f };
-        rectVertices[3].position = { -0.5f, 0.5f, 0.0f };
-
-        rectVertices[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
-        rectVertices[1].color = { 0.5f, 0.5f, 0.5f, 1.0f };
-        rectVertices[2].color = { 1.0f, 0.0f, 0.0f, 1.0f };
-        rectVertices[3].color = { 0.0f, 1.0f, 0.0f, 1.0f };
-
-        std::array<uint32_t, 6> indices{ 0, 1, 2, 2, 1, 3 };
-
-        uploadMesh(indices, rectVertices, _ctx->rectangle);
-
-        _ctx->mainDeletionQueue.push([&] {
-            destroyBuffer(_ctx->vma, _ctx->rectangle.indexBuffer);
-            destroyBuffer(_ctx->vma, _ctx->rectangle.vertexBuffer);
-        });
-
         // TEST MESH
         _ctx->testMeshes = loadGltfMeshes(*this, "assets/basicmesh.glb").value();
 
