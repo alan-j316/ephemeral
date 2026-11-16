@@ -40,13 +40,13 @@ namespace ephemeral
     std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(
         EphemeralEngine& engine, const std::filesystem::path& filePath) noexcept
     {
-        fmt::println("Loading GLTF: {}\n", filePath.string());
+        fmt::println("Loading GLTF: {}", filePath.string());
 
         // NOLINTNEXTLINE
         constexpr auto gltfOptions = fastgltf::Options::LoadExternalBuffers;
 
         auto expectedData = fastgltf::GltfDataBuffer::FromPath(filePath);
-        if (!expectedData.has_value())
+        if (expectedData.has_error())
         {
             fmt::println("There was an error loading {}.\n{}", filePath.string(),
                          getErrorMessage(expectedData.error()));
@@ -59,6 +59,15 @@ namespace ephemeral
 
         auto load = parser.loadGltfBinary(data, filePath.parent_path(), gltfOptions);
 
+        if (load)
+        {
+            gltf = std::move(load.get());
+        }
+        else
+        {
+            fmt::println("There was an error loading the GLTF: {}", filePath.string());
+            return std::nullopt;
+        }
 
         std::vector<std::shared_ptr<MeshAsset>> meshes;
         // Use the same vector for all meshes
@@ -152,6 +161,8 @@ namespace ephemeral
             engine.uploadMesh(indices, vertices, asset.meshBuffers);
             meshes.emplace_back(std::make_shared<MeshAsset>(std::move(asset)));
         }
+
+        fmt::println("Asset({}) was loaded successfully!", filePath.string());
         return meshes;
     }
 } // namespace ephemeral

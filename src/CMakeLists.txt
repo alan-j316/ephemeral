@@ -50,6 +50,17 @@ foreach (GLSL ${GLSL_SOURCE_FILES})
     )
 endforeach (GLSL)
 
+
+add_custom_command(
+        TARGET ${ENGINE_NAME}
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E
+        copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:${ENGINE_NAME}>/assets"
+        COMMENT "Copying assets to build directory..."
+)
+
 #add_custom_target(
 #        CompileShaders
 #        DEPENDS ${SPIRV_BINARY_FILES}

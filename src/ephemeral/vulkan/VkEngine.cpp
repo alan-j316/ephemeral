@@ -14,6 +14,7 @@
 #include "VkDescriptors.h"
 #include "VkImages.h"
 #include "VkInitializer.h"
+#include "VkLoader.h"
 #include "VkPipelines.h"
 #include "VkTypes.h"
 
@@ -127,7 +128,10 @@ namespace ephemeral
         std::vector<ComputeEffect> bgEffects{};
         int currentBgEffect{ 0 };
         GPUMeshBuffers rectangle;
+        std::vector<std::shared_ptr<MeshAsset>> testMeshes;
     };
+
+
 
     /// +---------------------------------------------------------------------------------------+
     /// |                              STATIC FUNCTIONS                                         |
@@ -183,11 +187,20 @@ namespace ephemeral
 
         vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipeline);
 
-        const GPUDrawPushConstants pc{ .worldMatrix  = flcn::Mat4F::identity(),
-                                       .vertexBuffer = ctx.rectangle.vertexBufferAddress };
+        // const GPUDrawPushConstants pc{ .worldMatrix  = flcn::Mat4F::identity(),
+        //                                .vertexBuffer = ctx.rectangle.vertexBufferAddress };
+        // vkCmdPushConstants(cmdBuffer, ctx.meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+        // vkCmdBindIndexBuffer(cmdBuffer, ctx.rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+        // vkCmdDrawIndexed(cmdBuffer, 6, 1, 0, 0, 0);
+        //
+        const auto mesh = ctx.testMeshes[2];
+        const GPUDrawPushConstants pc {
+            .worldMatrix = flcn::Mat4F::identity(),.vertexBuffer = mesh->meshBuffers.vertexBufferAddress
+        };
         vkCmdPushConstants(cmdBuffer, ctx.meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-        vkCmdBindIndexBuffer(cmdBuffer, ctx.rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmdBuffer, 6, 1, 0, 0, 0);
+        vkCmdBindIndexBuffer(cmdBuffer, mesh->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(cmdBuffer, mesh->surfaces[0].count, 1, mesh->surfaces[0].startIndex, 0, 0);
+
 
         vkCmdEndRendering(cmdBuffer);
     }
@@ -347,6 +360,7 @@ namespace ephemeral
 
         _ctx->drawExtent.width  = _ctx->drawImage.extent.width;
         _ctx->drawExtent.height = _ctx->drawImage.extent.height;
+
 
         // ------------------------ COMMAND BUFFER RECORDING ------------------------
         // Reset the command buffer and begin recording the commands
@@ -999,6 +1013,9 @@ namespace ephemeral
             destroyBuffer(_ctx->vma, _ctx->rectangle.indexBuffer);
             destroyBuffer(_ctx->vma, _ctx->rectangle.vertexBuffer);
         });
+
+        // TEST MESH
+        _ctx->testMeshes = loadGltfMeshes(*this, "assets/basicmesh.glb").value();
     }
 
 
@@ -1036,7 +1053,6 @@ namespace ephemeral
 
 
         // ------------------------ BUFFER COPY USING STAGING BUFFER ------------------------
-
         const AllocatedBuffer staging = createBuffer(vertexBufferSize + indexBufferSize, _ctx->vma,
                                                      VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
         void* data                    = staging.allocationInfo.pMappedData;
