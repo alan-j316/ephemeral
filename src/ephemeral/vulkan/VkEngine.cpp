@@ -133,6 +133,8 @@ namespace ephemeral
 
         // ------------------------ ENGINE GLOBAL ------------------------
         DeletionQueue mainDeletionQueue;
+        bool resizeRequested;
+        float renderScale;
 
         // ------------------------ DATA ------------------------
         std::vector<ComputeEffect> bgEffects{};
@@ -284,7 +286,7 @@ namespace ephemeral
         // We initialize SDL and create a window with it.
         SDL_Init(SDL_INIT_VIDEO);
         _window = SDL_CreateWindow(ENGINE_NAME, static_cast<int>(_windowExtent.width),
-                                   static_cast<int>(_windowExtent.height), SDL_WINDOW_VULKAN);
+                                   static_cast<int>(_windowExtent.height), SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
         // ------------------------ INITIALIZE VULKAN ------------------------
         initVulkan();
@@ -354,6 +356,12 @@ namespace ephemeral
 
     void EphemeralEngine::draw()
     {
+        _ctx->drawExtent.width =
+            static_cast<float>(std::min(_ctx->swapChainExtent.width, _ctx->drawImage.extent.width)) * _ctx->renderScale;
+        _ctx->drawExtent.height =
+            static_cast<float>(std::min(_ctx->swapChainExtent.height, _ctx->drawImage.extent.height)) *
+            _ctx->renderScale;
+
         // ------------------------ WAITING & SWAP CHAIN IMAGE ACQUISITION ------------------------
         const auto curFence           = _ctx->renderFences[_frameNumber % FRAME_OVERLAP];
         const auto swapChainSemaphore = _ctx->swapChainSemaphores[_frameNumber % FRAME_OVERLAP];
@@ -366,8 +374,21 @@ namespace ephemeral
 
         // Request an image from the swapchain
         uint32_t swapChainImageIdx;
-        VK_CHECK(vkAcquireNextImageKHR(_ctx->device, _ctx->swapChain, TIMEOUT, swapChainSemaphore, nullptr,
-                                       &swapChainImageIdx));
+        const auto imageAcquireResult = vkAcquireNextImageKHR(_ctx->device, _ctx->swapChain, TIMEOUT,
+                                                              swapChainSemaphore, nullptr, &swapChainImageIdx);
+        if (imageAcquireResult != VK_SUCCESS)
+        {
+            if (imageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                _ctx->resizeRequested = true;
+                return;
+            }
+            else
+            {
+                fmt::println("Swapchain error: {}", string_VkResult(imageAcquireResult));
+            }
+        }
+
         // NOTE: Render semaphore must be sync with the image not frame index.
         const auto renderSemaphore = _ctx->renderSemaphores[swapChainImageIdx];
 
@@ -448,8 +469,18 @@ namespace ephemeral
                                             .swapchainCount     = 1,
                                             .pSwapchains        = &_ctx->swapChain,
                                             .pImageIndices      = &swapChainImageIdx };
-        VK_CHECK(vkQueuePresentKHR(_ctx->graphicsQueue, &presentInfo));
-
+        const auto presentResult = vkQueuePresentKHR(_ctx->graphicsQueue, &presentInfo);
+        if (presentResult != VK_SUCCESS)
+        {
+            if (presentResult == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                _ctx->resizeRequested = true;
+            }
+            else
+            {
+                fmt::println("Swapchain error: {}", string_VkResult(presentResult));
+            }
+        }
         // Increment the frame number
         ++_frameNumber;
     }
@@ -492,6 +523,12 @@ namespace ephemeral
                 continue;
             }
 
+            // ------------------------ SWAPCHAIN RESIZE ------------------------
+            if (_ctx->resizeRequested)
+            {
+                recreateSwapchain();
+            }
+
             // ------------------------ IMGUI ------------------------
             ImGui_ImplVulkan_NewFrame();
             ImGui_ImplSDL3_NewFrame();
@@ -499,6 +536,9 @@ namespace ephemeral
 
             if (ImGui::Begin("background"))
             {
+                // Resolution scale slider
+                ImGui::SliderFloat("Render scale", &_ctx->renderScale, 0.3f, 1.0f);
+
                 ComputeEffect& effect = _ctx->bgEffects[_ctx->currentBgEffect];
                 ImGui::Text("Selected effect: %s", effect.name.c_str());
                 ImGui::SliderInt("Effect Index", &_ctx->currentBgEffect, 0,
@@ -993,6 +1033,25 @@ namespace ephemeral
                 destroyBuffer(_ctx->vma, mesh->meshBuffers.vertexBuffer);
             }
         });
+    }
+
+
+    void EphemeralEngine::recreateSwapchain() noexcept
+    {
+        // Destroy the swapchain
+        vkDeviceWaitIdle(_ctx->device);
+        destroySwapChain();
+
+        // Get the new width and height
+        int w, h;
+        SDL_GetWindowSize(_window, &w, &h);
+        _windowExtent.width  = w;
+        _windowExtent.height = h;
+
+        // Create the swap chain with the new size.
+        createSwapChain(_windowExtent.width, _windowExtent.height);
+
+        _ctx->resizeRequested = false;
     }
 
 

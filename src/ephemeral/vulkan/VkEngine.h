@@ -84,6 +84,8 @@ namespace ephemeral
 
         void initDefaultData() noexcept;
 
+        void recreateSwapchain() noexcept;
+
 
         [[nodiscard]] struct FrameData& currentFrame() const noexcept; // NOLINT(readability-identifier-naming)
     };
