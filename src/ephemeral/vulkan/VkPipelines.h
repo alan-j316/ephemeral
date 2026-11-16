@@ -46,7 +46,7 @@ namespace ephemeral
         void setDepthAttachmentFormat(VkFormat format) noexcept;
 
         /// Disable depth testing.
-        void disableDepthTest() noexcept;
+        void setDepthTestState(bool depthWriteEnable, VkCompareOp op) noexcept;
 
 
         /// Build the pipeline.

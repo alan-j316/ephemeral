@@ -119,11 +119,11 @@ namespace ephemeral
     { _renderingInfo.depthAttachmentFormat = format; }
 
 
-    void PipelineBuilder::disableDepthTest() noexcept
+    void PipelineBuilder::setDepthTestState(bool depthWriteEnable, VkCompareOp op) noexcept
     {
-        _depthStencil.depthTestEnable       = VK_FALSE;
-        _depthStencil.depthWriteEnable      = VK_FALSE;
-        _depthStencil.depthCompareOp        = VK_COMPARE_OP_NEVER;
+        _depthStencil.depthTestEnable       = VK_TRUE;
+        _depthStencil.depthWriteEnable      = depthWriteEnable;
+        _depthStencil.depthCompareOp        = op;
         _depthStencil.depthBoundsTestEnable = VK_FALSE;
         _depthStencil.stencilTestEnable     = VK_FALSE;
         _depthStencil.front                 = {};

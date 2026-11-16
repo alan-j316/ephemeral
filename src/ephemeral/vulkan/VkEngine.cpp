@@ -35,6 +35,17 @@ namespace ephemeral
 {
     static constexpr auto TIMEOUT = std::numeric_limits<uint32_t>::max();
 
+    // TODO: REMOVE/REPLACE
+    flcn::Mat4F makePersp(const float aspect, const float fov, const float far, const float near)
+    {
+        const float s1 = 1 / (std::tan(fov * 0.5f) * aspect);
+        const float s2 = 1 / std::tan(fov * 0.5f);
+        return flcn::Mat4F{ s1, 0, 0,  0, 0, -s2, 0, 0, 0, 0, -far / (far - near), -(far * near) / (far - near),
+                            0,  0, -1, 0 };
+    }
+    // TODO: REMOVE/REPLACE END
+
+
     struct FrameData
     {
         VkCommandPool cmdPool;
@@ -98,6 +109,7 @@ namespace ephemeral
 
         // ------------------------ DRAW RESOURCES ------------------------
         VulkanImage drawImage;
+        VulkanImage depthImage;
         VkExtent2D drawExtent;
 
         // ------------------------ DESCRIPTORS ------------------------
@@ -161,7 +173,13 @@ namespace ephemeral
         const VkRenderingAttachmentInfo colorAttachment =
             vkutils::attachmentInfo(ctx.drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-        const VkRenderingInfo renderingInfo = vkutils::renderingInfo(ctx.drawExtent, &colorAttachment, nullptr);
+        // ------------------------ DEPTH ATTACHMENT ------------------------
+        const VkRenderingAttachmentInfo depthAttachment =
+            vkutils::depthAttachmentInfo(ctx.depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
+
+        const VkRenderingInfo renderingInfo =
+            vkutils::renderingInfo(ctx.drawExtent, &colorAttachment, &depthAttachment);
 
         vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.trianglePipeline);
 
@@ -193,8 +211,16 @@ namespace ephemeral
         // vkCmdBindIndexBuffer(cmdBuffer, ctx.rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
         // vkCmdDrawIndexed(cmdBuffer, 6, 1, 0, 0, 0);
         //
+        flcn::Mat4F view  = flcn::Mat4F::identity();
+        view(2, 3)        = -4;
+        float aspectRatio = static_cast<float>(ctx.drawExtent.width) / static_cast<float>(ctx.drawExtent.height);
+        float fov         = 1.22173f; // 70deg
+        // NOTE: Swapping near and far values can increase quality of depth testing
+        // REF : https://vkguide.dev/docs/new_chapter_3/loading_meshes/
+        auto projection = makePersp(aspectRatio, fov, 0.1f, 10000.0f);
+
         const auto mesh = ctx.testMeshes[2];
-        const GPUDrawPushConstants pc{ .worldMatrix  = flcn::Mat4F::identity(),
+        const GPUDrawPushConstants pc{ .worldMatrix  = projection * view,
                                        .vertexBuffer = mesh->meshBuffers.vertexBufferAddress };
         vkCmdPushConstants(cmdBuffer, ctx.meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
         vkCmdBindIndexBuffer(cmdBuffer, mesh->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
@@ -380,6 +406,9 @@ namespace ephemeral
         // Transition image to color attachment optimal for geometry
         vkutils::transitionImage(cmdBuffer, _ctx->drawImage.image, VK_IMAGE_LAYOUT_GENERAL,
                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        // Transition depth image to depth attachment optimal
+        vkutils::transitionImage(cmdBuffer, _ctx->depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED,
+                                 VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
         drawGeometry(cmdBuffer, *_ctx);
 
@@ -604,10 +633,30 @@ namespace ephemeral
             vkutils::imageviewCreateInfo(drawImage.format, drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
         VK_CHECK(vkCreateImageView(_ctx->device, &drawImgViewInfo, _ctx->allocator, &drawImage.imageView));
 
+
+        // ------------------------ DEPTH IMAGE -----------------------
+        auto& depthImage                   = _ctx->depthImage;
+        depthImage.extent                  = drawImage.extent;
+        depthImage.format                  = VK_FORMAT_D32_SFLOAT;
+        VkImageUsageFlags depthImageUsages = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+        VkImageCreateInfo depthImageInfo =
+            vkutils::imageCreateInfo(depthImage.format, depthImageUsages, depthImage.extent);
+        vmaCreateImage(_ctx->vma, &depthImageInfo, &drawImgAllocInfo, &depthImage.image, &depthImage.allocation,
+                       nullptr);
+
+        // ImageView
+        const VkImageViewCreateInfo depthImgViewInfo =
+            vkutils::imageviewCreateInfo(depthImage.format, depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
+        VK_CHECK(vkCreateImageView(_ctx->device, &depthImgViewInfo, _ctx->allocator, &depthImage.imageView));
+
         // Add to the deletion queue
         _ctx->mainDeletionQueue.push([&] {
             vkDestroyImageView(_ctx->device, drawImage.imageView, _ctx->allocator);
             vmaDestroyImage(_ctx->vma, drawImage.image, drawImage.allocation);
+
+            vkDestroyImageView(_ctx->device, depthImage.imageView, _ctx->allocator);
+            vmaDestroyImage(_ctx->vma, depthImage.image, depthImage.allocation);
         });
     }
 
@@ -825,9 +874,9 @@ namespace ephemeral
         builder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         builder.disableMSAA();
         builder.disableBlending();
-        builder.disableDepthTest();
+        builder.setDepthTestState(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
         builder.setColorAttachmentFormat(_ctx->drawImage.format);
-        builder.setDepthAttachmentFormat(VK_FORMAT_UNDEFINED);
+        builder.setDepthAttachmentFormat(_ctx->depthImage.format);
         _ctx->trianglePipeline = builder.build(_ctx->device, _ctx->allocator);
 
         // ------------------------ CLEANUP ------------------------
@@ -880,11 +929,12 @@ namespace ephemeral
         pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
         pipelineBuilder.disableMSAA();
         pipelineBuilder.disableBlending();
-        pipelineBuilder.disableDepthTest();
+        pipelineBuilder.setDepthTestState(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
         pipelineBuilder.setColorAttachmentFormat(_ctx->drawImage.format);
-        pipelineBuilder.setDepthAttachmentFormat(VK_FORMAT_UNDEFINED);
+        pipelineBuilder.setDepthAttachmentFormat(_ctx->depthImage.format);
         _ctx->meshPipeline = pipelineBuilder.build(_ctx->device, _ctx->allocator);
+
 
         // ------------------------ CLEANUP ------------------------
         vkDestroyShaderModule(_ctx->device, vertexShader, _ctx->allocator);
