@@ -36,6 +36,11 @@ namespace ephemeral
         // run main loop
         void run();
 
+        // TODO: Move back to private
+        void uploadMesh(
+            std::span<uint32_t> indices, std::span<Vertex> vertices,
+            struct GPUMeshBuffers& outBuffer) const noexcept; // NOLINT(readability-identifier-naming)
+
         // Config variables
         static constexpr auto ENGINE_NAME               = "Ephemeral";
         static constexpr bool VALIDATION_LAYERS_ENABLED = true;
@@ -81,9 +86,6 @@ namespace ephemeral
 
         void initDefaultData() noexcept;
 
-        void uploadMesh(
-            std::span<uint32_t> indices, std::span<Vertex> vertices,
-            struct GPUMeshBuffers& outBuffer) const noexcept; // NOLINT(readability-identifier-naming)
 
         [[nodiscard]] struct FrameData& currentFrame() const noexcept; // NOLINT(readability-identifier-naming)
     };
