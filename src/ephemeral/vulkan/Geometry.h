@@ -22,4 +22,14 @@ namespace ephemeral
         float uvY;
     };
 
+    struct GPUSceneData
+    {
+        flcn::Mat4F view;
+        flcn::Mat4F proj;
+        flcn::Mat4F viewProj;
+        flcn::Vec4F ambientColor;
+        flcn::Vec4F sunlightDir; // W-coordinate reserved light power.
+        flcn::Vec4F sunlightColor;
+    };
+
 } // namespace ephemeral

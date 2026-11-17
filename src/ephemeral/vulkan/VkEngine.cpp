@@ -52,6 +52,7 @@ namespace ephemeral
         VkCommandBuffer mainCmdBuffer;
 
         DeletionQueue deletionQueue;
+        DescriptorAllocatorResizable frameDescriptors;
     };
 
 
@@ -116,6 +117,7 @@ namespace ephemeral
         DescriptorAllocator gDescriptorAllocator;
         VkDescriptorSet drawImageDescriptorSet;
         VkDescriptorSetLayout drawImageDescriptorSetLayout;
+        VkDescriptorSetLayout sceneDescriptorSetLayout;
 
         // ------------------------ PIPELINES ------------------------
         VkPipelineLayout gradientPipelineLayout;
@@ -139,8 +141,8 @@ namespace ephemeral
         // ------------------------ DATA ------------------------
         std::vector<ComputeEffect> bgEffects{};
         int currentBgEffect{ 0 };
-        GPUMeshBuffers rectangle;
         std::vector<std::shared_ptr<MeshAsset>> testMeshes;
+        GPUSceneData sceneData;
     };
 
 
@@ -167,8 +169,26 @@ namespace ephemeral
     }
 
 
-    inline static void drawGeometry(const VkCommandBuffer cmdBuffer, const EphemeralEngineContext& ctx) noexcept
+    inline static void drawGeometry(const VkCommandBuffer cmdBuffer, FrameData& currentFrame,
+                                    const EphemeralEngineContext& ctx) noexcept
     {
+        // ------------------------ PER FRAME DESCRIPTOR ------------------------
+        AllocatedBuffer gpuSceneBuffer = createBuffer(sizeof(GPUSceneData), ctx.vma, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                                      VMA_MEMORY_USAGE_CPU_TO_GPU);
+        // Destroy the scene buffer every frame
+        currentFrame.deletionQueue.push([gpuSceneBuffer, &ctx] {
+            destroyBuffer(ctx.vma, gpuSceneBuffer);
+        });
+        const auto sceneUniformData = static_cast<GPUSceneData*>(mapBuffer(ctx.vma, gpuSceneBuffer));
+        *sceneUniformData = ctx.sceneData;
+        unmapBuffer(ctx.vma, gpuSceneBuffer);
+
+        VkDescriptorSet globalDescriptor = currentFrame.frameDescriptors.allocate(ctx.device, ctx.sceneDescriptorSetLayout, ctx.allocator);
+        DescriptorWriter writer;
+        writer.writeBuffer(0, gpuSceneBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        writer.updateSet(ctx.device, globalDescriptor);
+
+
         // ------------------------ COLOR ATTACHMENTS ------------------------
         const VkRenderingAttachmentInfo colorAttachment =
             vkutils::attachmentInfo(ctx.drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -313,8 +333,9 @@ namespace ephemeral
         {
             // ------------------------ VULKAN ------------------------
             vkDeviceWaitIdle(_ctx->device);
-            for (const auto& frame : _ctx->frames)
+            for (auto& frame : _ctx->frames)
             {
+                frame.deletionQueue.flush();
                 // Destroy Command Pool
                 vkDestroyCommandPool(_ctx->device, frame.cmdPool, _ctx->allocator);
             }
@@ -370,6 +391,7 @@ namespace ephemeral
         VK_CHECK(vkWaitForFences(_ctx->device, 1, &curFence, true, TIMEOUT));
         // Flush the deletion queue for the current frame
         currentFrame().deletionQueue.flush();
+        currentFrame().frameDescriptors.clear(_ctx->device);
         VK_CHECK(vkResetFences(_ctx->device, 1, &curFence));
 
         // Request an image from the swapchain
@@ -420,7 +442,7 @@ namespace ephemeral
         vkutils::transitionImage(cmdBuffer, _ctx->depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED,
                                  VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
-        drawGeometry(cmdBuffer, *_ctx);
+        drawGeometry(cmdBuffer, currentFrame(), *_ctx);
 
         // Transition image to transfer src for blitting to swapchain image.
         vkutils::transitionImage(cmdBuffer, _ctx->drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -761,10 +783,33 @@ namespace ephemeral
 
         // ------------------------ ATTACH OUR DRAW IMAGE TO THE DESCRIPTOR ------------------------
         DescriptorWriter writer;
-        writer.writeImage(0, _ctx->drawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        writer.writeImage(0, _ctx->drawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL,
+                          VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
         writer.updateSet(_ctx->device, _ctx->drawImageDescriptorSet);
 
+        for (size_t i = 0; i < FRAME_OVERLAP; ++i)
+        {
+            std::vector<DescriptorAllocatorResizable::PoolSizeRatio> frameSizes{
+                { .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 3 },
+                { .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio = 3 },
+                { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 3 },
+                { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 4 }
+            };
+            _ctx->frames[i].frameDescriptors = DescriptorAllocatorResizable();
+            _ctx->frames[i].frameDescriptors.init(_ctx->device, _ctx->allocator, 1000, frameSizes);
+
+            _ctx->mainDeletionQueue.push([&, i] {
+                _ctx->frames[i].frameDescriptors.destroy(_ctx->device, _ctx->allocator);
+            });
+        }
+
+        DescriptorSetLayoutBuilder sceneLayoutBuilder;
+        sceneLayoutBuilder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        _ctx->sceneDescriptorSetLayout =
+            sceneLayoutBuilder.build(_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, _ctx->allocator);
+
         _ctx->mainDeletionQueue.push([&] {
+            vkDestroyDescriptorSetLayout(_ctx->device, _ctx->sceneDescriptorSetLayout, _ctx->allocator);
             _ctx->gDescriptorAllocator.destroyPool(_ctx->device, _ctx->allocator);
             vkDestroyDescriptorSetLayout(_ctx->device, _ctx->drawImageDescriptorSetLayout, _ctx->allocator);
         });

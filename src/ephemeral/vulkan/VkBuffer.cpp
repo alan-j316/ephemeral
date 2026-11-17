@@ -38,6 +38,17 @@ namespace ephemeral
     }
 
 
+    void* mapBuffer(const VmaAllocator allocator, const AllocatedBuffer& buffer) noexcept
+    {
+        void* data;
+        VK_CHECK(vmaMapMemory(allocator, buffer.allocation, &data));
+        return data;
+    }
+
+    void unmapBuffer(const VmaAllocator allocator, const AllocatedBuffer& buffer) noexcept
+    { vmaUnmapMemory(allocator, buffer.allocation); }
+
+
     void destroyBuffer(const VmaAllocator allocator, const AllocatedBuffer& buffer) noexcept
     { vmaDestroyBuffer(allocator, buffer.buffer, buffer.allocation); }
 } // namespace ephemeral

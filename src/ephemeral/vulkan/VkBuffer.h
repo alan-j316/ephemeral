@@ -24,6 +24,12 @@ namespace ephemeral
     AllocatedBuffer createBuffer(size_t size, VmaAllocator allocator, VkBufferUsageFlags usageFlags,
                                  VmaMemoryUsage memoryUsage) noexcept;
 
+    /// Map the allocation and return a pointer to the underlying memory.
+    void* mapBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer) noexcept;
+
+    /// Unmap the buffer.
+    void unmapBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer) noexcept;
+
     /// Free a VMA allocated vulkan buffer.
     void destroyBuffer(VmaAllocator allocator, const AllocatedBuffer& buffer) noexcept;
 
