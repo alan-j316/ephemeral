@@ -252,8 +252,6 @@ namespace ephemeral
 
         vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipeline);
 
-        // TODO: Figure our when the descriptor set is not getting destroyed despite
-        //       descriptor pool getting destroyed.
         VkDescriptorSet imageSet =
             currentFrame.frameDescriptors.allocate(ctx.device, ctx.singleImageDescriptorLayout, ctx.allocator);
         {
@@ -854,18 +852,19 @@ namespace ephemeral
         _ctx->sceneDescriptorSetLayout =
             sceneLayoutBuilder.build(_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, _ctx->allocator);
 
-        _ctx->mainDeletionQueue.push([&] {
-            vkDestroyDescriptorSetLayout(_ctx->device, _ctx->sceneDescriptorSetLayout, _ctx->allocator);
-            _ctx->gDescriptorAllocator.destroyPool(_ctx->device, _ctx->allocator);
-            vkDestroyDescriptorSetLayout(_ctx->device, _ctx->drawImageDescriptorSetLayout, _ctx->allocator);
-        });
-
-
         // TEXTURE SAMPLER DESCRIPTORS
         DescriptorSetLayoutBuilder imageDescriptorLayoutBuilder;
         imageDescriptorLayoutBuilder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         _ctx->singleImageDescriptorLayout =
             imageDescriptorLayoutBuilder.build(_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, _ctx->allocator);
+
+        _ctx->mainDeletionQueue.push([&] {
+            vkDestroyDescriptorSetLayout(_ctx->device, _ctx->singleImageDescriptorLayout, _ctx->allocator);
+            vkDestroyDescriptorSetLayout(_ctx->device, _ctx->sceneDescriptorSetLayout, _ctx->allocator);
+            _ctx->gDescriptorAllocator.destroyPool(_ctx->device, _ctx->allocator);
+            vkDestroyDescriptorSetLayout(_ctx->device, _ctx->drawImageDescriptorSetLayout, _ctx->allocator);
+        });
+
     }
 
 
