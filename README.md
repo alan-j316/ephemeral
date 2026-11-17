@@ -2,7 +2,10 @@
 
 # Ephemeral: Simple Vulkan Renderer
 
-A simple vulkan renderer based on vkguide.dev
+API-decoupled Vulkan-based rendering engine(In active development).
+
+## Screenshots
+![Vulkan Engine](docs/assets/Screenshot.png)
 
 # Prerequisites
 
@@ -19,12 +22,6 @@ Ensure the following tools are installed and available in your system PATH:
 - <a href="https://releases.llvm.org/download.html" target="_blank">Clang-Format</a> : Required for automated code style
   enforcement.
 
-## CMake Configuration
-
-- **ENABLE_STRICT**: Enables application level strict mode by enforcing "treating all warnings as errors". **ON** by
-  default in both CI/CD and CMakePresets.
-- **ENABLE_TEST**: Enables *test application*. **ON** by default in both CI/CD and CMakePresets.
-
 ## Getting Started
 
 ### Configuration
@@ -39,7 +36,7 @@ Compile the entire project, including tests and benchmarks. Bash
 
 `cmake --build build`
 
-### Developer Utilities
+## Developer Utilities
 
 Run these targets to maintain code quality and documentation.
 
@@ -47,7 +44,7 @@ Run these targets to maintain code quality and documentation.
 
 - Generate Docs: cmake `--build build --target docs`
 
-## Doxygen Configuration
 
-Use the <a href="https://www.doxygen.nl/download.html" target="_blank">Doxygen Wizard</a> to customize your project's
-configuration file.
+## Credits
+- [VkGuide.dev](https://vkguide.dev/)
+- [Khronos Vulkan Tutorial](https://docs.vulkan.org/tutorial/latest/00_Introduction.html)
