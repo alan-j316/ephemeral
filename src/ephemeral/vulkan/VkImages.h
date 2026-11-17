@@ -22,6 +22,24 @@ namespace ephemeral
         VkFormat format;
     };
 
+    struct ImageCreateConfig
+    {
+        VkExtent3D size;
+        VkFormat format;
+        VkImageUsageFlags usageFlags;
+        bool mipmapped{ false };
+    };
+
+
+    /// Create a @ref VulkanImage of the given @p size, @p format and with the @p usageFlags.
+    VulkanImage createImage(VkDevice device, const VkAllocationCallbacks* allocator, VmaAllocator vma,
+                            const ImageCreateConfig& config) noexcept;
+
+
+    /// Destroy the vulkan image.
+    void destroyImage(VkDevice device, const VkAllocationCallbacks* allocator, const VulkanImage& image,
+                 VmaAllocator vma) noexcept;
+
 
     namespace vkutils
     {

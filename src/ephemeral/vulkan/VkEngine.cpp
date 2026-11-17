@@ -118,6 +118,7 @@ namespace ephemeral
         VkDescriptorSet drawImageDescriptorSet;
         VkDescriptorSetLayout drawImageDescriptorSetLayout;
         VkDescriptorSetLayout sceneDescriptorSetLayout;
+        VkDescriptorSetLayout singleImageDescriptorLayout;
 
         // ------------------------ PIPELINES ------------------------
         VkPipelineLayout gradientPipelineLayout;
@@ -143,6 +144,8 @@ namespace ephemeral
         int currentBgEffect{ 0 };
         std::vector<std::shared_ptr<MeshAsset>> testMeshes;
         GPUSceneData sceneData;
+        VulkanImage whiteImage, blackImage, grayImage, errorCheckerBoardImage;
+        VkSampler defaultSamplerLinear, defaultSamplerNearest;
     };
 
 
@@ -150,6 +153,32 @@ namespace ephemeral
     /// +---------------------------------------------------------------------------------------+
     /// |                              STATIC FUNCTIONS                                         |
     /// +---------------------------------------------------------------------------------------+
+
+    /// TODO: HELPERS REMOVE (TEMP) NOT YET IMPL IN FALCON
+    inline flcn::Vec4F clamp(const flcn::Vec4F& vec, const float min, const float max) noexcept
+    {
+        return flcn::Vec4F{
+            std::clamp(vec.x(), min, max),
+            std::clamp(vec.y(), min, max),
+            std::clamp(vec.z(), min, max),
+            std::clamp(vec.w(), min, max),
+        };
+    }
+
+    inline uint32_t packUnorm4x8(const flcn::Vec4F& vec) noexcept
+    {
+        flcn::Vec4F clamped = clamp(vec, 0.0f, 1.0f);
+
+        const auto x = static_cast<uint32_t>(std::round(clamped.x() * 255.0f));
+        const auto y = static_cast<uint32_t>(std::round(clamped.y() * 255.0f));
+        const auto z = static_cast<uint32_t>(std::round(clamped.z() * 255.0f));
+        const auto w = static_cast<uint32_t>(std::round(clamped.w() * 255.0f));
+
+        return (w << 24u) | (z << 16u) | (y << 8u) | x;
+    }
+
+
+    /// TODO: HELPERS REMOVE END
 
 
     inline static void drawBackground(const VkCommandBuffer cmdBuffer, const uint32_t frameNumber,
@@ -180,10 +209,11 @@ namespace ephemeral
             destroyBuffer(ctx.vma, gpuSceneBuffer);
         });
         const auto sceneUniformData = static_cast<GPUSceneData*>(mapBuffer(ctx.vma, gpuSceneBuffer));
-        *sceneUniformData = ctx.sceneData;
+        *sceneUniformData           = ctx.sceneData;
         unmapBuffer(ctx.vma, gpuSceneBuffer);
 
-        VkDescriptorSet globalDescriptor = currentFrame.frameDescriptors.allocate(ctx.device, ctx.sceneDescriptorSetLayout, ctx.allocator);
+        VkDescriptorSet globalDescriptor =
+            currentFrame.frameDescriptors.allocate(ctx.device, ctx.sceneDescriptorSetLayout, ctx.allocator);
         DescriptorWriter writer;
         writer.writeBuffer(0, gpuSceneBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         writer.updateSet(ctx.device, globalDescriptor);
@@ -221,6 +251,21 @@ namespace ephemeral
         // ------------------------ RENDER ------------------------
 
         vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipeline);
+
+        // TODO: Figure our when the descriptor set is not getting destroyed despite
+        //       descriptor pool getting destroyed.
+        VkDescriptorSet imageSet =
+            currentFrame.frameDescriptors.allocate(ctx.device, ctx.singleImageDescriptorLayout, ctx.allocator);
+        {
+            DescriptorWriter descriptorWriter;
+            descriptorWriter.writeImage(0, ctx.errorCheckerBoardImage.imageView, ctx.defaultSamplerNearest,
+                                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+            descriptorWriter.updateSet(ctx.device, imageSet);
+        }
+
+        vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipelineLayout, 0, 1, &imageSet, 0,
+                                nullptr);
 
         flcn::Mat4F view  = flcn::Mat4F::identity();
         view(2, 3)        = -4;
@@ -377,11 +422,12 @@ namespace ephemeral
 
     void EphemeralEngine::draw()
     {
-        _ctx->drawExtent.width =
-            static_cast<float>(std::min(_ctx->swapChainExtent.width, _ctx->drawImage.extent.width)) * _ctx->renderScale;
-        _ctx->drawExtent.height =
+        _ctx->drawExtent.width = static_cast<uint32_t>(
+            static_cast<float>(std::min(_ctx->swapChainExtent.width, _ctx->drawImage.extent.width)) *
+            _ctx->renderScale);
+        _ctx->drawExtent.height = static_cast<uint32_t>(
             static_cast<float>(std::min(_ctx->swapChainExtent.height, _ctx->drawImage.extent.height)) *
-            _ctx->renderScale;
+            _ctx->renderScale);
 
         // ------------------------ WAITING & SWAP CHAIN IMAGE ACQUISITION ------------------------
         const auto curFence           = _ctx->renderFences[_frameNumber % FRAME_OVERLAP];
@@ -813,6 +859,13 @@ namespace ephemeral
             _ctx->gDescriptorAllocator.destroyPool(_ctx->device, _ctx->allocator);
             vkDestroyDescriptorSetLayout(_ctx->device, _ctx->drawImageDescriptorSetLayout, _ctx->allocator);
         });
+
+
+        // TEXTURE SAMPLER DESCRIPTORS
+        DescriptorSetLayoutBuilder imageDescriptorLayoutBuilder;
+        imageDescriptorLayoutBuilder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        _ctx->singleImageDescriptorLayout =
+            imageDescriptorLayoutBuilder.build(_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, _ctx->allocator);
     }
 
 
@@ -915,8 +968,7 @@ namespace ephemeral
             fmt::println("There was an error loading the mesh vertex shader");
             return;
         }
-        if (!vkutils::loadShaderModule("shaders/ColoredTriangle.frag.spv", _ctx->device, _ctx->allocator,
-                                       &fragmentShader))
+        if (!vkutils::loadShaderModule("shaders/TextureImage.frag.spv", _ctx->device, _ctx->allocator, &fragmentShader))
         {
             fmt::println("There was an error loading the mesh fragment shader");
             return;
@@ -931,6 +983,8 @@ namespace ephemeral
         VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkutils::pipelineLayoutCreateInfo();
         pipelineLayoutInfo.pushConstantRangeCount     = 1;
         pipelineLayoutInfo.pPushConstantRanges        = &pushConstants;
+        pipelineLayoutInfo.setLayoutCount             = 1;
+        pipelineLayoutInfo.pSetLayouts                = &_ctx->singleImageDescriptorLayout;
 
         VK_CHECK(vkCreatePipelineLayout(_ctx->device, &pipelineLayoutInfo, _ctx->allocator, &_ctx->meshPipelineLayout));
 
@@ -1068,6 +1122,65 @@ namespace ephemeral
                 destroyBuffer(_ctx->vma, mesh->meshBuffers.vertexBuffer);
             }
         });
+
+        // TEST TEXTURES
+        // ------------------------ CREATE COLORS ------------------------
+        const uint32_t white   = packUnorm4x8(flcn::Vec4F::one());
+        const uint32_t black   = packUnorm4x8(flcn::Vec4F{ 0.0f, 0.0f, 0.0f, 1.0f });
+        const uint32_t gray    = packUnorm4x8(flcn::Vec4F{ 0.66f, 0.66f, 0.66f, 1.0f });
+        const uint32_t magenta = packUnorm4x8(flcn::Vec4F{ 1, 0, 1, 1 });
+
+        std::array<uint32_t, 16ull * 16ull> pixels; // 16x16 checkerboard pattern
+        for (size_t x = 0; x < 16ull; ++x)
+        {
+            for (size_t y = 0; y < 16ull; ++y)
+            {
+                pixels[y * 16 + x] = ((x % 2) ^ (y % 2)) ? magenta : gray;
+            }
+        }
+
+        // ------------------------ CREATE IMAGES ------------------------
+        ImageCreateConfig config{ .size   = VkExtent3D{ .width = 1, .height = 1, .depth = 1 },
+                                  .format = VK_FORMAT_R8G8B8A8_UNORM,
+                                  // NOLINTNEXTLINE
+                                  .usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                  .mipmapped  = false };
+
+        _ctx->whiteImage = createImage(_ctx->device, _ctx->allocator, _ctx->vma, config);
+        _ctx->blackImage = createImage(_ctx->device, _ctx->allocator, _ctx->vma, config);
+        _ctx->grayImage  = createImage(_ctx->device, _ctx->allocator, _ctx->vma, config);
+        uploadImage(config, _ctx->whiteImage, &white);
+        uploadImage(config, _ctx->blackImage, &black);
+        uploadImage(config, _ctx->grayImage, &gray);
+
+
+        config.size                  = VkExtent3D{ .width = 16, .height = 16, .depth = 1 };
+        _ctx->errorCheckerBoardImage = createImage(_ctx->device, _ctx->allocator, _ctx->vma, config);
+        uploadImage(config, _ctx->errorCheckerBoardImage, pixels.data());
+
+
+        // ------------------------ CREATE SAMPLERS ------------------------
+        VkSamplerCreateInfo samplerInfo{
+            .sType     = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = VK_FILTER_NEAREST,
+            .minFilter = VK_FILTER_NEAREST,
+        };
+        vkCreateSampler(_ctx->device, &samplerInfo, _ctx->allocator, &_ctx->defaultSamplerNearest);
+
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        vkCreateSampler(_ctx->device, &samplerInfo, _ctx->allocator, &_ctx->defaultSamplerLinear);
+
+
+        _ctx->mainDeletionQueue.push([&] {
+            vkDestroySampler(_ctx->device, _ctx->defaultSamplerLinear, _ctx->allocator);
+            vkDestroySampler(_ctx->device, _ctx->defaultSamplerNearest, _ctx->allocator);
+
+            destroyImage(_ctx->device, _ctx->allocator, _ctx->errorCheckerBoardImage, _ctx->vma);
+            destroyImage(_ctx->device, _ctx->allocator, _ctx->grayImage, _ctx->vma);
+            destroyImage(_ctx->device, _ctx->allocator, _ctx->blackImage, _ctx->vma);
+            destroyImage(_ctx->device, _ctx->allocator, _ctx->whiteImage, _ctx->vma);
+        });
     }
 
 
@@ -1087,6 +1200,42 @@ namespace ephemeral
         createSwapChain(_windowExtent.width, _windowExtent.height);
 
         _ctx->resizeRequested = false;
+    }
+
+
+    void EphemeralEngine::uploadImage(const ImageCreateConfig& config, const VulkanImage& outImage,
+                                      const void* data) const noexcept
+    {
+        // Create a staging buffer
+        const uint32_t dataSize = config.size.width * config.size.height * config.size.depth * 4; // 4 = RGBA
+        const AllocatedBuffer stagingBuffer =
+            createBuffer(dataSize, _ctx->vma, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+        // Copy the data into the staging buffer
+        memcpy(stagingBuffer.allocationInfo.pMappedData, data, dataSize);
+
+        // Immediately transfer the image to optimal layout and record the command buffer
+        immediateSubmit(*_ctx, [&](const VkCommandBuffer cmdBuffer) {
+            vkutils::transitionImage(cmdBuffer, outImage.image, VK_IMAGE_LAYOUT_UNDEFINED,
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+            const VkBufferImageCopy copyRegion{ .bufferOffset      = 0,
+                                                .bufferRowLength   = 0,
+                                                .bufferImageHeight = 0,
+                                                .imageSubresource  = { .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                                       .mipLevel       = 0,
+                                                                       .baseArrayLayer = 0,
+                                                                       .layerCount     = 1 },
+                                                .imageExtent       = config.size };
+
+            vkCmdCopyBufferToImage(cmdBuffer, stagingBuffer.buffer, outImage.image,
+                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+            vkutils::transitionImage(cmdBuffer, outImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        });
+
+        // Destroy the staging buffer.
+        destroyBuffer(_ctx->vma, stagingBuffer);
     }
 
 

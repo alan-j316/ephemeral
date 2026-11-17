@@ -15,9 +15,7 @@ struct SDL_Window; // NOLINT(readability-identifier-naming)
 namespace ephemeral
 {
     struct Extent2D
-    {
-        uint32_t width, height;
-    };
+    { uint32_t width, height; };
 
     class EphemeralEngine
     {
@@ -37,9 +35,8 @@ namespace ephemeral
         void run();
 
         // TODO: Move back to private
-        void uploadMesh(
-            std::span<uint32_t> indices, std::span<Vertex> vertices,
-            struct GPUMeshBuffers& outBuffer) const noexcept; // NOLINT(readability-identifier-naming)
+        void uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices,
+                        struct GPUMeshBuffers& outBuffer) const noexcept; // NOLINT(readability-identifier-naming)
 
         // Config variables
         static constexpr auto ENGINE_NAME               = "Ephemeral";
@@ -85,6 +82,11 @@ namespace ephemeral
         void initDefaultData() noexcept;
 
         void recreateSwapchain() noexcept;
+
+        // NOLINTBEGIN
+        void uploadImage(const struct ImageCreateConfig& config, const struct VulkanImage& outImage,
+                                  const void* data) const noexcept;
+        // NOLINTEND
 
 
         [[nodiscard]] struct FrameData& currentFrame() const noexcept; // NOLINT(readability-identifier-naming)
