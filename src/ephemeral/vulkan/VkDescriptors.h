@@ -70,7 +70,8 @@ namespace ephemeral
 
         void destroy(VkDevice device, const VkAllocationCallbacks* pAllocator) noexcept;
 
-        VkDescriptorSet allocate(VkDevice device, VkDescriptorSetLayout layout, const VkAllocationCallbacks* pAllocator, void* pNext = nullptr);
+        VkDescriptorSet allocate(VkDevice device, VkDescriptorSetLayout layout, const VkAllocationCallbacks* pAllocator,
+                                 void* pNext = nullptr);
 
     private:
         VkDescriptorPool getPool(VkDevice device, const VkAllocationCallbacks* pAllocator) noexcept;
@@ -81,5 +82,20 @@ namespace ephemeral
         std::vector<VkDescriptorPool> _fullPools;
         std::vector<VkDescriptorPool> _readyPools;
         uint32_t _setsPerPool{};
+    };
+
+
+    struct DescriptorWriter
+    {
+        std::deque<VkDescriptorImageInfo> imageInfos;
+        std::deque<VkDescriptorBufferInfo> bufferInfos;
+        std::vector<VkWriteDescriptorSet> writes;
+
+        void writeBuffer(uint32_t binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type) noexcept;
+        void writeImage(uint32_t binding, VkImageView imageView, VkSampler sampler, VkImageLayout imageLayout,
+                        VkDescriptorType type) noexcept;
+
+        void clear() noexcept;
+        void updateSet(VkDevice device, VkDescriptorSet set) noexcept;
     };
 } // namespace ephemeral

@@ -760,20 +760,10 @@ namespace ephemeral
 
 
         // ------------------------ ATTACH OUR DRAW IMAGE TO THE DESCRIPTOR ------------------------
-        VkDescriptorImageInfo imageInfo{ .imageView   = _ctx->drawImage.imageView,
-                                         .imageLayout = VK_IMAGE_LAYOUT_GENERAL };
+        DescriptorWriter writer;
+        writer.writeImage(0, _ctx->drawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        writer.updateSet(_ctx->device, _ctx->drawImageDescriptorSet);
 
-        const VkWriteDescriptorSet drawImageWrite{ .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                                                   .pNext           = nullptr,
-                                                   .dstSet          = _ctx->drawImageDescriptorSet,
-                                                   .dstBinding      = 0,
-                                                   .descriptorCount = 1,
-                                                   .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                                                   .pImageInfo      = &imageInfo };
-
-
-        vkUpdateDescriptorSets(_ctx->device, 1, &drawImageWrite, 0, nullptr);
-        // Add the descriptor to the deletion queue
         _ctx->mainDeletionQueue.push([&] {
             _ctx->gDescriptorAllocator.destroyPool(_ctx->device, _ctx->allocator);
             vkDestroyDescriptorSetLayout(_ctx->device, _ctx->drawImageDescriptorSetLayout, _ctx->allocator);

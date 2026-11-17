@@ -225,4 +225,59 @@ namespace ephemeral
     }
 
 
+    /// +---------------------------------------------------------------------------------------+
+    /// |                              DESCRIPTOR WRITE                                         |
+    /// +---------------------------------------------------------------------------------------+
+
+    void DescriptorWriter::writeBuffer(const uint32_t binding, const VkBuffer buffer, const size_t size,
+                                       const size_t offset, const VkDescriptorType type) noexcept
+    {
+        VkDescriptorBufferInfo& info =
+            bufferInfos.emplace_back(VkDescriptorBufferInfo{ .buffer = buffer, .offset = offset, .range = size });
+
+        const VkWriteDescriptorSet write{ .sType      = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                          .dstSet     = VK_NULL_HANDLE, // Left empty for now until we need to write it
+                                          .dstBinding = binding,
+                                          .descriptorCount = 1,
+                                          .descriptorType  = type,
+                                          .pBufferInfo     = &info };
+
+        writes.push_back(write);
+    }
+
+
+    void DescriptorWriter::writeImage(const uint32_t binding, const VkImageView imageView, const VkSampler sampler,
+                                      const VkImageLayout imageLayout, const VkDescriptorType type) noexcept
+    {
+        VkDescriptorImageInfo& info = imageInfos.emplace_back(
+            VkDescriptorImageInfo{ .sampler = sampler, .imageView = imageView, .imageLayout = imageLayout });
+
+        const VkWriteDescriptorSet write{ .sType      = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                          .dstSet     = VK_NULL_HANDLE, // Left empty for now until we need to write it
+                                          .dstBinding = binding,
+                                          .descriptorCount = 1,
+                                          .descriptorType  = type,
+                                          .pImageInfo      = &info };
+        writes.push_back(write);
+    }
+
+
+    void DescriptorWriter::clear() noexcept
+    {
+        bufferInfos.clear();
+        imageInfos.clear();
+        writes.clear();
+    }
+
+
+    void DescriptorWriter::updateSet(const VkDevice device, const VkDescriptorSet set) noexcept
+    {
+        for (auto& write : writes)
+        {
+            write.dstSet = set;
+        }
+        vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+    }
+
+
 } // namespace ephemeral
