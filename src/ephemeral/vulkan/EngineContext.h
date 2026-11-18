@@ -17,6 +17,7 @@
 #include "VkLoader.h"
 #include "VkTypes.h"
 
+#include <ephemeral/utils/Camera.h>
 
 namespace ephemeral
 {
@@ -132,5 +133,7 @@ namespace ephemeral
         GLTFMetallicRoughness metalRoughMaterial;
         DrawContext mainDrawContext;
         std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
+
+        Camera mainCamera;
     };
 } // namespace ephemeral

@@ -80,7 +80,7 @@ namespace ephemeral
 
         // NOLINTBEGIN
         void uploadImage(const struct ImageCreateConfig& config, const struct VulkanImage& outImage,
-                                  const void* data) const noexcept;
+                         const void* data) const noexcept;
         // NOLINTEND
 
         void updateScene() noexcept;

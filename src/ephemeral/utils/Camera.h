@@ -19,6 +19,10 @@ namespace ephemeral
 {
     class Camera
     {
+
+        static constexpr float SENSITIVITY_MULTIPLIER = 0.001f;
+        static constexpr float VELOCITY_REDUCER       = 0.1f;
+
     public:
         flcn::Vec3F velocity;
         flcn::Vec3F position;
@@ -45,7 +49,7 @@ namespace ephemeral
         inline void update()
         {
             const auto cameraRotation = getRotationMatrix();
-            position += (cameraRotation * flcn::Vec4F(velocity * 0.5f, 0.0f))
+            position += (cameraRotation * flcn::Vec4F(velocity * VELOCITY_REDUCER, 0.0f))
                             .swizzle<flcn::axis::X, flcn::axis::Y, flcn::axis::Z>();
         }
 

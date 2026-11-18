@@ -285,6 +285,11 @@ namespace ephemeral
         initImgui();
         initDefaultData();
 
+        _ctx->mainCamera.velocity = flcn::Vec3F::zero();
+        _ctx->mainCamera.position = flcn::Vec3F(0, 0, 4);
+        _ctx->mainCamera.pitch    = 0;
+        _ctx->mainCamera.yaw      = 0;
+
 
         // everything went fine
         _isInitialized = true;
@@ -485,12 +490,14 @@ namespace ephemeral
             // Handle events on queue
             while (SDL_PollEvent(&e) != 0)
             {
-                ImGui_ImplSDL3_ProcessEvent(&e);
                 // close the window when user alt-f4s or clicks the X button
                 if (e.type == SDL_EVENT_QUIT)
                 {
                     bQuit = true;
                 }
+
+                ImGui_ImplSDL3_ProcessEvent(&e);
+                _ctx->mainCamera.processEvent(e);
 
                 // Stop rendering when the window is in the background.
                 if (e.type == SDL_EVENT_WINDOW_MINIMIZED)
@@ -1209,6 +1216,9 @@ namespace ephemeral
 
     void EphemeralEngine::updateScene() noexcept
     {
+        auto& cam = _ctx->mainCamera;
+        cam.update();
+
         _ctx->mainDrawContext.renderables.clear();
 
         for (int x = -3; x < 3; ++x)
@@ -1224,10 +1234,11 @@ namespace ephemeral
         _ctx->loadedNodes["Suzanne"]->draw(flcn::Mat4F::identity(), _ctx->mainDrawContext);
 
 
-        flcn::Mat4F view = flcn::Mat4F::identity();
-        view(2, 3)       = -3;
 
-        _ctx->sceneData.view = view;
+        // flcn::Mat4F view = flcn::Mat4F::identity();
+        // view(2, 3)       = -3;
+
+        _ctx->sceneData.view = cam.getViewMatrix();
         _ctx->sceneData.proj = makePersp(
             1.4, static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 0.1f, 10000.0f);
         _ctx->sceneData.viewProj = _ctx->sceneData.proj * _ctx->sceneData.view;
