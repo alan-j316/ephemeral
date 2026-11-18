@@ -19,8 +19,12 @@ target_sources(
 set_property(TARGET EphemeralUtils_Internal PROPERTY CXX_STANDARD 20)
 target_include_directories(EphemeralUtils_Internal PUBLIC "${EPHEMERAL_ROOT_DIR}")
 
-target_link_libraries(EphemeralUtils_Internal PUBLIC
+target_link_libraries(EphemeralUtils_Internal
+        PUBLIC
         Falcon::Falcon
+
+        PRIVATE
+        SDL3::SDL3
 )
 
 target_precompile_headers(
