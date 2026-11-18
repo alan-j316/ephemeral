@@ -43,7 +43,7 @@ namespace ephemeral
         DescriptorWriter descriptorWriter;
 
         void buildPipelines(struct EphemeralEngineContext& ctx) noexcept; // NOLINT
-        void clearResource(VkDevice device, const VkAllocationCallbacks* pAllocator) noexcept;
+        void clearResource(VkDevice device, const VkAllocationCallbacks* pAllocator) const noexcept;
 
         MaterialInstance writeMaterial(VkDevice device, MaterialPass pass, const VkAllocationCallbacks* pAllocator,
                                        const MaterialResources& resources,

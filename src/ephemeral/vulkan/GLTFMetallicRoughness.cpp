@@ -91,14 +91,21 @@ namespace ephemeral
         // ------------------------ DESTROY SHADER MODULES ------------------------
         vkDestroyShaderModule(ctx.device, meshVertShader, ctx.allocator);
         vkDestroyShaderModule(ctx.device, meshFragShader, ctx.allocator);
+
+        ctx.mainDeletionQueue.push([&] {
+            vkDestroyPipeline(ctx.device, opaquePipeline.pipeline, ctx.allocator);
+            vkDestroyPipeline(ctx.device, transparentPipeline.pipeline, ctx.allocator);
+            // NOTE: We use only a single pipeline layout so we shouldn't try to destroy
+            //       layout from both pipeline.
+            vkDestroyPipelineLayout(ctx.device, opaquePipeline.pipelineLayout, ctx.allocator);
+            vkDestroyDescriptorSetLayout(ctx.device, materialLayout, ctx.allocator);
+        });
     }
 
-
-    void GLTFMetallicRoughness::clearResource(VkDevice device, const VkAllocationCallbacks* pAllocator) noexcept
-    {
-        // TODO: IMPL
-        // vkDestroyPipeline()
-    }
+    // TODO: Rename to destroy resources?
+    void GLTFMetallicRoughness::clearResource(const VkDevice device,
+                                              const VkAllocationCallbacks* pAllocator) const noexcept
+    {}
 
 
     MaterialInstance GLTFMetallicRoughness::writeMaterial(const VkDevice device, const MaterialPass pass,
