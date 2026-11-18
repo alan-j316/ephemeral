@@ -777,7 +777,8 @@ namespace ephemeral
         DescriptorSetLayoutBuilder sceneLayoutBuilder;
         sceneLayoutBuilder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         // TODO: Updated to both vertex and fragment shader
-        _ctx->sceneDescriptorSetLayout = sceneLayoutBuilder.build(_ctx->device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, _ctx->allocator);
+        _ctx->sceneDescriptorSetLayout = sceneLayoutBuilder.build(
+            _ctx->device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, _ctx->allocator);
 
         // TEXTURE SAMPLER DESCRIPTORS
         DescriptorSetLayoutBuilder imageDescriptorLayoutBuilder;
@@ -1119,8 +1120,8 @@ namespace ephemeral
         materialResources.bufferOffset = 0;
 
         // TODO: UPdate to main color MaterialPass::MAIN_COLOR
-        _ctx->defaultData = _ctx->metalRoughMaterial.writeMaterial(
-            _ctx->device, MaterialPass::OPAQUE, _ctx->allocator, materialResources, _ctx->gDescriptorAllocator);
+        _ctx->defaultData = _ctx->metalRoughMaterial.writeMaterial(_ctx->device, MaterialPass::OPAQUE, _ctx->allocator,
+                                                                   materialResources, _ctx->gDescriptorAllocator);
 
         _ctx->mainDeletionQueue.push([&, materialConstants] {
             destroyBuffer(_ctx->vma, materialConstants);
@@ -1210,11 +1211,21 @@ namespace ephemeral
     {
         _ctx->mainDrawContext.renderables.clear();
 
+        for (int x = -3; x < 3; ++x)
+        {
+            flcn::Mat4F scale       = flcn::Mat4F::makeScale(0.4f);
+            flcn::Mat4F translation = flcn::Mat4F::identity();
+            translation(0, 3)       = static_cast<float>(x);
+            translation(1, 3)       = 1;
+
+            _ctx->loadedNodes["Cube"]->draw(translation * scale, _ctx->mainDrawContext);
+        }
+
         _ctx->loadedNodes["Suzanne"]->draw(flcn::Mat4F::identity(), _ctx->mainDrawContext);
 
 
         flcn::Mat4F view = flcn::Mat4F::identity();
-        view(2, 3)       = -5;
+        view(2, 3)       = -3;
 
         _ctx->sceneData.view = view;
         _ctx->sceneData.proj = makePersp(
