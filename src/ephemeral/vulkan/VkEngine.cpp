@@ -1237,10 +1237,11 @@ namespace ephemeral
 
         // flcn::Mat4F view = flcn::Mat4F::identity();
         // view(2, 3)       = -3;
-
+        // float fov         = std::numbers::pi / 4; // 45deg
+        float fov         = 1.22173f; // 70deg
         _ctx->sceneData.view = cam.getViewMatrix();
         _ctx->sceneData.proj = makePersp(
-            1.4, static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 0.1f, 10000.0f);
+            static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), fov, 0.1f, 10000.0f);
         _ctx->sceneData.viewProj = _ctx->sceneData.proj * _ctx->sceneData.view;
 
         _ctx->sceneData.ambientColor  = flcn::Vec4F(0.1f, 0.1f, 0.1f, 0.1f);
