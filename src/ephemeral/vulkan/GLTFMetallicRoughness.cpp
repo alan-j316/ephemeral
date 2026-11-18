@@ -21,13 +21,13 @@ namespace ephemeral
         // ------------------------ SHADER MODULES ------------------------
         VkShaderModule meshVertShader, meshFragShader;
 
-        if (!vkutils::loadShaderModule("assets/Mesh.vert.spv", ctx.device, ctx.allocator, &meshVertShader))
+        if (!vkutils::loadShaderModule("shaders/Mesh.vert.spv", ctx.device, ctx.allocator, &meshVertShader))
         {
             fmt::println("There was an error compiling the mesh vertex shader.");
             return;
         }
 
-        if (!vkutils::loadShaderModule("assets/Mesh.frag.spv", ctx.device, ctx.allocator, &meshFragShader))
+        if (!vkutils::loadShaderModule("shaders/Mesh.frag.spv", ctx.device, ctx.allocator, &meshFragShader))
         {
             fmt::println("There was an error compiling the mesh fragment shader.");
             return;

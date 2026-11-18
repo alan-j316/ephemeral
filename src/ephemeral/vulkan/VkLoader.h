@@ -10,6 +10,7 @@
  */
 
 
+#include "RenderPrimitives.h"
 #include "VkTypes.h"
 
 #include <fastgltf/parser.hpp>
@@ -17,10 +18,14 @@
 
 namespace ephemeral
 {
+    struct GLTFMaterial
+    { MaterialInstance material; };
+
     struct GeoSurface
     {
         uint32_t startIndex;
         uint32_t count;
+        std::shared_ptr<GLTFMaterial> material;
     };
 
     struct MeshAsset
@@ -34,6 +39,7 @@ namespace ephemeral
     // Forward Declaration
     class EphemeralEngine; // NOLINT
 
-    std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(EphemeralEngine& engine, const std::filesystem::path& filePath) noexcept;
+    std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(
+        EphemeralEngine& engine, const std::filesystem::path& filePath) noexcept;
 
 } // namespace ephemeral

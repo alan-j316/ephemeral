@@ -53,7 +53,7 @@ namespace ephemeral
         VkDeviceAddress vertexBufferAddress;
     };
 
-    //
+
     struct DrawContext
     { std::vector<RenderObject> renderables; };
 
@@ -64,7 +64,52 @@ namespace ephemeral
     public:
         virtual ~IRenderable() = default;
 
-        virtual void draw(const flcn::Mat4F& topMatrix, DrawContext& ctx) noexcept;
+        virtual void draw(const flcn::Mat4F& topMatrix, DrawContext& ctx) noexcept = 0;
+    };
+
+
+
+    // Scene node.
+    // Can hold children and parents transformation will propagate to them.
+    class Node: public IRenderable
+    {
+    public:
+        // Parent pointer must be a weak pointer to avoid circular dependencies
+        std::weak_ptr<Node> parent;
+        std::vector<std::shared_ptr<Node>> children;
+
+        flcn::Mat4F localTransform;
+        flcn::Mat4F worldTransform;
+
+        // Update the parents world transform and propagate the new world transform down to the children.
+        void refreshTransform(const flcn::Mat4F& parentMatrix)
+        {
+            worldTransform = parentMatrix * localTransform;
+            for (const auto& child : children)
+            {
+                child->refreshTransform(worldTransform);
+            }
+        }
+
+        // Draw the node.
+        void draw(const flcn::Mat4F& topMatrix, DrawContext& ctx) noexcept override
+        {
+            // Draw child nodes
+            for (const auto& child : children)
+            {
+                child->draw(topMatrix, ctx);
+            }
+        }
+    };
+
+
+    // A render graph node with a mesh
+    class MeshNode: public Node
+    {
+    public:
+        std::shared_ptr<struct MeshAsset> mesh; // NOLINT
+
+        void draw(const flcn::Mat4F& topMatrix, DrawContext& ctx) noexcept override;
     };
 
 } // namespace ephemeral

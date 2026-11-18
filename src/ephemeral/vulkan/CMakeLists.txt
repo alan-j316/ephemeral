@@ -10,6 +10,7 @@ add_library(
         VkLoader.cpp
         VMA.cpp
         GLTFMetallicRoughness.cpp
+        RenderPrimitives.cpp
 )
 
 target_sources(

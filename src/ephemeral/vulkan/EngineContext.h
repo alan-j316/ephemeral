@@ -11,11 +11,11 @@
 
 #include "DeletionQueue.h"
 #include "GLTFMetallicRoughness.h"
+#include "Geometry.h"
 #include "VkDescriptors.h"
 #include "VkImages.h"
 #include "VkLoader.h"
 #include "VkTypes.h"
-#include "Geometry.h"
 
 
 namespace ephemeral
@@ -130,5 +130,7 @@ namespace ephemeral
 
         MaterialInstance defaultData;
         GLTFMetallicRoughness metalRoughMaterial;
+        DrawContext mainDrawContext;
+        std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
     };
 } // namespace ephemeral

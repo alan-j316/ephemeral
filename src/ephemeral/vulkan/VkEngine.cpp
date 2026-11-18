@@ -152,35 +152,54 @@ namespace ephemeral
 
         // ------------------------ RENDER ------------------------
 
-        vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipeline);
-
-        VkDescriptorSet imageSet =
-            currentFrame.frameDescriptors.allocate(ctx.device, ctx.singleImageDescriptorLayout, ctx.allocator);
+        // TODO: rename renderables to opaque surfaces
+        for (const RenderObject& draw : ctx.mainDrawContext.renderables)
         {
-            DescriptorWriter descriptorWriter;
-            descriptorWriter.writeImage(0, ctx.errorCheckerBoardImage.imageView, ctx.defaultSamplerNearest,
-                                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-            descriptorWriter.updateSet(ctx.device, imageSet);
+            vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipeline);
+            vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipelineLayout,
+                                    0, 1, &globalDescriptor, 0, nullptr);
+            vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipelineLayout,
+                                    1, 1, &draw.material->materialSet, 0, nullptr);
+
+            vkCmdBindIndexBuffer(cmdBuffer, draw.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+            GPUDrawPushConstants pc{ .worldMatrix = draw.transform, .vertexBuffer = draw.vertexBufferAddress };
+            vkCmdPushConstants(cmdBuffer, draw.material->pipeline->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                               sizeof(GPUDrawPushConstants), &pc);
+            vkCmdDrawIndexed(cmdBuffer, draw.indexCount, 1, draw.firstIndex, 0, 0);
         }
 
-        vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipelineLayout, 0, 1, &imageSet, 0,
-                                nullptr);
+        // vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipeline);
+        //
+        // VkDescriptorSet imageSet =
+        //     currentFrame.frameDescriptors.allocate(ctx.device, ctx.singleImageDescriptorLayout, ctx.allocator);
+        // {
+        //     DescriptorWriter descriptorWriter;
+        //     descriptorWriter.writeImage(0, ctx.errorCheckerBoardImage.imageView, ctx.defaultSamplerNearest,
+        //                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        //                                 VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        //     descriptorWriter.updateSet(ctx.device, imageSet);
+        // }
+        //
+        // vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipelineLayout, 0, 1, &imageSet,
+        // 0,
+        //                         nullptr);
+        //
+        // flcn::Mat4F view  = flcn::Mat4F::identity();
+        // view(2, 3)        = -4;
+        // float aspectRatio = static_cast<float>(ctx.drawExtent.width) / static_cast<float>(ctx.drawExtent.height);
+        // float fov         = 1.22173f; // 70deg
+        // // NOTE: Swapping near and far values can increase quality of depth testing
+        // // REF : https://vkguide.dev/docs/new_chapter_3/loading_meshes/
+        // auto projection = makePersp(aspectRatio, fov, 0.1f, 10000.0f);
+        //
+        // const auto mesh = ctx.testMeshes[2];
+        // const GPUDrawPushConstants pc{ .worldMatrix  = projection * view,
+        //                                .vertexBuffer = mesh->meshBuffers.vertexBufferAddress };
 
-        flcn::Mat4F view  = flcn::Mat4F::identity();
-        view(2, 3)        = -4;
-        float aspectRatio = static_cast<float>(ctx.drawExtent.width) / static_cast<float>(ctx.drawExtent.height);
-        float fov         = 1.22173f; // 70deg
-        // NOTE: Swapping near and far values can increase quality of depth testing
-        // REF : https://vkguide.dev/docs/new_chapter_3/loading_meshes/
-        auto projection = makePersp(aspectRatio, fov, 0.1f, 10000.0f);
-
-        const auto mesh = ctx.testMeshes[2];
-        const GPUDrawPushConstants pc{ .worldMatrix  = projection * view,
-                                       .vertexBuffer = mesh->meshBuffers.vertexBufferAddress };
-        vkCmdPushConstants(cmdBuffer, ctx.meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-        vkCmdBindIndexBuffer(cmdBuffer, mesh->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmdBuffer, mesh->surfaces[0].count, 1, mesh->surfaces[0].startIndex, 0, 0);
+        // vkCmdPushConstants(cmdBuffer, ctx.meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+        // vkCmdBindIndexBuffer(cmdBuffer, mesh->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+        // vkCmdDrawIndexed(cmdBuffer, mesh->surfaces[0].count, 1, mesh->surfaces[0].startIndex, 0, 0);
 
 
         vkCmdEndRendering(cmdBuffer);
@@ -322,6 +341,7 @@ namespace ephemeral
 
     void EphemeralEngine::draw()
     {
+        updateScene();
         _ctx->drawExtent.width = static_cast<uint32_t>(
             static_cast<float>(std::min(_ctx->swapChainExtent.width, _ctx->drawImage.extent.width)) *
             _ctx->renderScale);
@@ -756,8 +776,8 @@ namespace ephemeral
 
         DescriptorSetLayoutBuilder sceneLayoutBuilder;
         sceneLayoutBuilder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-        _ctx->sceneDescriptorSetLayout =
-            sceneLayoutBuilder.build(_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, _ctx->allocator);
+        // TODO: Updated to both vertex and fragment shader
+        _ctx->sceneDescriptorSetLayout = sceneLayoutBuilder.build(_ctx->device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, _ctx->allocator);
 
         // TEXTURE SAMPLER DESCRIPTORS
         DescriptorSetLayoutBuilder imageDescriptorLayoutBuilder;
@@ -1098,8 +1118,9 @@ namespace ephemeral
         materialResources.dataBuffer   = materialConstants.buffer;
         materialResources.bufferOffset = 0;
 
+        // TODO: UPdate to main color MaterialPass::MAIN_COLOR
         _ctx->defaultData = _ctx->metalRoughMaterial.writeMaterial(
-            _ctx->device, MaterialPass::MAIN_COLOR, _ctx->allocator, materialResources, _ctx->gDescriptorAllocator);
+            _ctx->device, MaterialPass::OPAQUE, _ctx->allocator, materialResources, _ctx->gDescriptorAllocator);
 
         _ctx->mainDeletionQueue.push([&, materialConstants] {
             destroyBuffer(_ctx->vma, materialConstants);
@@ -1111,6 +1132,22 @@ namespace ephemeral
             destroyImage(_ctx->device, _ctx->allocator, _ctx->blackImage, _ctx->vma);
             destroyImage(_ctx->device, _ctx->allocator, _ctx->whiteImage, _ctx->vma);
         });
+
+        // ------------------------ TEST DATA ------------------------
+        for (const auto& mesh : _ctx->testMeshes)
+        {
+            auto meshNode  = std::make_shared<MeshNode>();
+            meshNode->mesh = mesh;
+
+            meshNode->localTransform = flcn::Mat4F::identity();
+            meshNode->worldTransform = flcn::Mat4F::identity();
+
+            for (auto& surface : meshNode->mesh->surfaces)
+            {
+                surface.material              = std::make_shared<GLTFMaterial>(_ctx->defaultData);
+                _ctx->loadedNodes[mesh->name] = std::move(meshNode);
+            }
+        }
     }
 
 
@@ -1166,6 +1203,27 @@ namespace ephemeral
 
         // Destroy the staging buffer.
         destroyBuffer(_ctx->vma, stagingBuffer);
+    }
+
+
+    void EphemeralEngine::updateScene() noexcept
+    {
+        _ctx->mainDrawContext.renderables.clear();
+
+        _ctx->loadedNodes["Suzanne"]->draw(flcn::Mat4F::identity(), _ctx->mainDrawContext);
+
+
+        flcn::Mat4F view = flcn::Mat4F::identity();
+        view(2, 3)       = -5;
+
+        _ctx->sceneData.view = view;
+        _ctx->sceneData.proj = makePersp(
+            1.4, static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 0.1f, 10000.0f);
+        _ctx->sceneData.viewProj = _ctx->sceneData.proj * _ctx->sceneData.view;
+
+        _ctx->sceneData.ambientColor  = flcn::Vec4F(0.1f, 0.1f, 0.1f, 0.1f);
+        _ctx->sceneData.sunlightColor = flcn::Vec4F::one();
+        _ctx->sceneData.sunlightDir   = flcn::Vec4F(0.0f, 1.0f, 0.5f, 1.0f);
     }
 
 

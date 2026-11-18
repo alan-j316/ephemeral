@@ -83,6 +83,8 @@ namespace ephemeral
                                   const void* data) const noexcept;
         // NOLINTEND
 
+        void updateScene() noexcept;
+
 
         [[nodiscard]] struct FrameData& currentFrame() const noexcept; // NOLINT(readability-identifier-naming)
     };

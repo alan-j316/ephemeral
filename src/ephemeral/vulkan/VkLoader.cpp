@@ -78,6 +78,7 @@ namespace ephemeral
         for (fastgltf::Mesh& mesh : gltf.meshes)
         {
             MeshAsset asset;
+            asset.name = mesh.name;
 
             // Clear the indices and vertices vector.
             indices.clear();
