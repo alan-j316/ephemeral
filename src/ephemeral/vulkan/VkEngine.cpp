@@ -8,9 +8,13 @@
  * @copyright Copyright (c) 2026 Alan Abraham P Kochumon
  */
 
+
 #include "VkEngine.h"
 
+#include "EngineContext.h"
+#include "GLTFMetallicRoughness.h"
 #include "Geometry.h"
+#include "RenderPrimitives.h"
 #include "VkDescriptors.h"
 #include "VkImages.h"
 #include "VkInitializer.h"
@@ -45,108 +49,6 @@ namespace ephemeral
     }
     // TODO: REMOVE/REPLACE END
 
-
-    struct FrameData
-    {
-        VkCommandPool cmdPool;
-        VkCommandBuffer mainCmdBuffer;
-
-        DeletionQueue deletionQueue;
-        DescriptorAllocatorResizable frameDescriptors;
-    };
-
-
-    struct ComputePushConstant
-    {
-        flcn::Vec4F data1;
-        flcn::Vec4F data2;
-        flcn::Vec4F data3;
-        flcn::Vec4F data4;
-    };
-
-    struct ComputeEffect
-    {
-        std::string name;
-
-        VkPipeline pipeline;
-        VkPipelineLayout pipelineLayout;
-
-        ComputePushConstant data;
-    };
-
-
-    // Main Engine Context(Used to remove header leakage)
-    struct EphemeralEngineContext
-    {
-        // ------------------------ VULKAN INSTANCE ------------------------
-        VkInstance instance;
-        VkDebugUtilsMessengerEXT debugMessenger;
-        VkPhysicalDevice gpu; ///< Physical Device
-        VkDevice device;      /// Logical Device
-        VkSurfaceKHR surface;
-        VkAllocationCallbacks* allocator{ nullptr };
-
-        // ------------------------ SWAP CHAIN ------------------------
-        VkSwapchainKHR swapChain;
-        VkFormat swapChainImageFormat;
-        std::vector<VkImage> swapChainImages;
-        std::vector<VkImageView> swapChainImageViews;
-        VkExtent2D swapChainExtent;
-
-        // ------------------------ COMMAND POOLS & BUFFERS ------------------------
-        std::array<FrameData, EphemeralEngine::FRAME_OVERLAP> frames;
-
-        VkQueue graphicsQueue;
-        uint32_t graphicsQueueFamily;
-
-        // ------------------------ SYNCHRONIZATION PRIMITIVES ------------------------
-        std::array<VkSemaphore, EphemeralEngine::FRAME_OVERLAP> swapChainSemaphores;
-        // NOTE: Number of render semaphores must match the number of swap chain images, not frames in flight
-        std::vector<VkSemaphore> renderSemaphores;
-        std::array<VkFence, EphemeralEngine::FRAME_OVERLAP> renderFences;
-
-        // ------------------------ VMA ------------------------
-        VmaAllocator vma;
-
-        // ------------------------ DRAW RESOURCES ------------------------
-        VulkanImage drawImage;
-        VulkanImage depthImage;
-        VkExtent2D drawExtent;
-
-        // ------------------------ DESCRIPTORS ------------------------
-        DescriptorAllocator gDescriptorAllocator;
-        VkDescriptorSet drawImageDescriptorSet;
-        VkDescriptorSetLayout drawImageDescriptorSetLayout;
-        VkDescriptorSetLayout sceneDescriptorSetLayout;
-        VkDescriptorSetLayout singleImageDescriptorLayout;
-
-        // ------------------------ PIPELINES ------------------------
-        VkPipelineLayout gradientPipelineLayout;
-        VkPipeline gradientPipeline;
-        VkPipelineLayout meshPipelineLayout;
-        VkPipeline meshPipeline;
-
-        // ------------------------ IMMEDIATE SUBMITS ------------------------
-        VkFence immFence;
-        VkCommandBuffer immCmdBuffer;
-        VkCommandPool immCmdPool;
-
-        // ------------------------ IMGUI ------------------------
-        VkDescriptorPool imguiPool;
-
-        // ------------------------ ENGINE GLOBAL ------------------------
-        DeletionQueue mainDeletionQueue;
-        bool resizeRequested;
-        float renderScale;
-
-        // ------------------------ DATA ------------------------
-        std::vector<ComputeEffect> bgEffects{};
-        int currentBgEffect{ 0 };
-        std::vector<std::shared_ptr<MeshAsset>> testMeshes;
-        GPUSceneData sceneData;
-        VulkanImage whiteImage, blackImage, grayImage, errorCheckerBoardImage;
-        VkSampler defaultSamplerLinear, defaultSamplerNearest;
-    };
 
 
 
@@ -813,8 +715,13 @@ namespace ephemeral
         // ------------------------ CREATE POOLS & DESCRIPTORS ------------------------
         // Create a descriptor pool that will hold 10 sets with 1 image each.
         // STORAGE_IMAGE - Compute Shader Write Target
-        std::array sizes{ DescriptorAllocator::PoolSizeRatio{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 } };
-        _ctx->gDescriptorAllocator.init(_ctx->device, _ctx->allocator, 10, sizes);
+        std::array sizes{
+            DescriptorAllocatorResizable::PoolSizeRatio{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 3 },
+            DescriptorAllocatorResizable::PoolSizeRatio{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio = 3 },
+            DescriptorAllocatorResizable::PoolSizeRatio{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 3 },
+            DescriptorAllocatorResizable::PoolSizeRatio{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 4 }
+        };
+        _ctx->gDescriptorAllocator.init(_ctx->device, _ctx->allocator, 1000, sizes);
 
         // Make descriptor set layout for our compute shader
         DescriptorSetLayoutBuilder builder;
@@ -822,7 +729,7 @@ namespace ephemeral
         _ctx->drawImageDescriptorSetLayout = builder.build(_ctx->device, VK_SHADER_STAGE_COMPUTE_BIT, _ctx->allocator);
         // Allocate the descriptor the image
         _ctx->drawImageDescriptorSet =
-            _ctx->gDescriptorAllocator.allocate(_ctx->device, _ctx->drawImageDescriptorSetLayout);
+            _ctx->gDescriptorAllocator.allocate(_ctx->device, _ctx->drawImageDescriptorSetLayout, _ctx->allocator);
 
 
         // ------------------------ ATTACH OUR DRAW IMAGE TO THE DESCRIPTOR ------------------------
@@ -861,10 +768,9 @@ namespace ephemeral
         _ctx->mainDeletionQueue.push([&] {
             vkDestroyDescriptorSetLayout(_ctx->device, _ctx->singleImageDescriptorLayout, _ctx->allocator);
             vkDestroyDescriptorSetLayout(_ctx->device, _ctx->sceneDescriptorSetLayout, _ctx->allocator);
-            _ctx->gDescriptorAllocator.destroyPool(_ctx->device, _ctx->allocator);
+            _ctx->gDescriptorAllocator.destroy(_ctx->device, _ctx->allocator);
             vkDestroyDescriptorSetLayout(_ctx->device, _ctx->drawImageDescriptorSetLayout, _ctx->allocator);
         });
-
     }
 
 
@@ -872,6 +778,8 @@ namespace ephemeral
     {
         initBackgroundPipelines();
         initMeshPipelines();
+
+        _ctx->metalRoughMaterial.buildPipelines(*_ctx);
     }
 
 
@@ -1171,7 +1079,30 @@ namespace ephemeral
         vkCreateSampler(_ctx->device, &samplerInfo, _ctx->allocator, &_ctx->defaultSamplerLinear);
 
 
-        _ctx->mainDeletionQueue.push([&] {
+        // ------------------------ GLTF Material Resources ------------------------
+        GLTFMetallicRoughness::MaterialResources materialResources;
+        materialResources.colorImage        = _ctx->whiteImage;
+        materialResources.colorSampler      = _ctx->defaultSamplerLinear;
+        materialResources.metalRoughImage   = _ctx->whiteImage;
+        materialResources.metalRoughSampler = _ctx->defaultSamplerLinear;
+
+        AllocatedBuffer materialConstants =
+            createBuffer(sizeof(GLTFMetallicRoughness::MaterialConstants), _ctx->vma,
+                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+        const auto sceneUniformData =
+            static_cast<GLTFMetallicRoughness::MaterialConstants*>(materialConstants.allocationInfo.pMappedData);
+        sceneUniformData->colorFactors          = flcn::Vec4F::one();
+        sceneUniformData->metalRoughnessFactors = flcn::Vec4F{ 1.0f, 0.5f, 0.0f, 0.0f };
+
+        materialResources.dataBuffer   = materialConstants.buffer;
+        materialResources.bufferOffset = 0;
+
+        _ctx->defaultData = _ctx->metalRoughMaterial.writeMaterial(
+            _ctx->device, MaterialPass::MAIN_COLOR, _ctx->allocator, materialResources, _ctx->gDescriptorAllocator);
+
+        _ctx->mainDeletionQueue.push([&, materialConstants] {
+            destroyBuffer(_ctx->vma, materialConstants);
             vkDestroySampler(_ctx->device, _ctx->defaultSamplerLinear, _ctx->allocator);
             vkDestroySampler(_ctx->device, _ctx->defaultSamplerNearest, _ctx->allocator);
 

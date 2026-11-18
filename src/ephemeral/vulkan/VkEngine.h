@@ -38,11 +38,6 @@ namespace ephemeral
         void uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices,
                         struct GPUMeshBuffers& outBuffer) const noexcept; // NOLINT(readability-identifier-naming)
 
-        // Config variables
-        static constexpr auto ENGINE_NAME               = "Ephemeral";
-        static constexpr bool VALIDATION_LAYERS_ENABLED = true;
-        static constexpr size_t FRAME_OVERLAP           = 2; // Triple buffering
-
     protected:
         bool _isInitialized{ false };
         int _frameNumber{ 0 };
