@@ -91,7 +91,7 @@ namespace ephemeral
 
         // NOLINTNEXTLINE
         friend std::optional<std::shared_ptr<struct LoadedGLTF>> loadGLTF(EphemeralEngine&,
-                                                                          const std::filesystem::path&) noexcept;
+                                                                          const std::filesystem::path&);
     };
 
 } // namespace ephemeral

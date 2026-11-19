@@ -286,9 +286,14 @@ namespace ephemeral
         initDefaultData();
 
         _ctx->mainCamera.velocity = flcn::Vec3F::zero();
-        _ctx->mainCamera.position = flcn::Vec3F(0, 0, 4);
+        _ctx->mainCamera.position = flcn::Vec3F(30.0f, 0.0f, -0.85f);
         _ctx->mainCamera.pitch    = 0;
         _ctx->mainCamera.yaw      = 0;
+
+        // Loading structure glb
+        const auto structureFile = loadGLTF(*this, "assets/structure.glb");
+        assert(structureFile.has_value() && "File loading failed!");
+        _ctx->loadedScenes["structure"] = *structureFile;
 
 
         // everything went fine
@@ -302,6 +307,7 @@ namespace ephemeral
         {
             // ------------------------ VULKAN ------------------------
             vkDeviceWaitIdle(_ctx->device);
+            _ctx->loadedScenes.clear();
             for (auto& frame : _ctx->frames)
             {
                 frame.deletionQueue.flush();
@@ -1238,7 +1244,7 @@ namespace ephemeral
         // flcn::Mat4F view = flcn::Mat4F::identity();
         // view(2, 3)       = -3;
         // float fov         = std::numbers::pi / 4; // 45deg
-        float fov         = 1.22173f; // 70deg
+        float fov            = 1.22173f; // 70deg
         _ctx->sceneData.view = cam.getViewMatrix();
         _ctx->sceneData.proj = makePersp(
             static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), fov, 0.1f, 10000.0f);
@@ -1247,6 +1253,8 @@ namespace ephemeral
         _ctx->sceneData.ambientColor  = flcn::Vec4F(0.1f, 0.1f, 0.1f, 0.1f);
         _ctx->sceneData.sunlightColor = flcn::Vec4F::one();
         _ctx->sceneData.sunlightDir   = flcn::Vec4F(0.0f, 1.0f, 0.5f, 1.0f);
+
+        _ctx->loadedScenes["structure"]->draw(flcn::Mat4F::identity(), _ctx->mainDrawContext);
     }
 
 

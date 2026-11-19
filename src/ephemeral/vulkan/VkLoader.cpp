@@ -170,21 +170,36 @@ namespace ephemeral
     }
 
 
-    void LoadedGLTF::draw(const flcn::Mat4F& topMatrix, DrawContext& ctx) noexcept {}
-
-
-    void LoadedGLTF::clearAll() noexcept {}
-
-
-    std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(EphemeralEngine& engine,
-                                                        const std::filesystem::path& filePath)
+    void LoadedGLTF::draw(const flcn::Mat4F& topMatrix, DrawContext& ctx) noexcept
     {
+        for (const auto& node : topNodes)
+        {
+            node->draw(topMatrix, ctx);
+        }
+    }
+
+
+    void LoadedGLTF::clearAll() noexcept
+    {
+        // TODO: Impl
+    }
+
+
+    std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(EphemeralEngine& engine, const std::filesystem::path& filePath)
+    {
+
+        if (!std::filesystem::exists(filePath))
+        {
+            fmt::println("No suitable file ({}) exists in the executable path.", filePath.string());
+            return std::nullopt;
+        }
+
         fmt::println("Loading {}...", filePath.string());
         auto& ctx = *engine._ctx;
 
         // ------------------------ INITIALIZATION ------------------------
-        auto scene = std::make_shared<LoadedGLTF>(engine);
-        const auto file  = scene.get();
+        auto scene      = std::make_shared<LoadedGLTF>(engine);
+        const auto file = scene.get();
         // Temporary array for storing the loaded assets
         std::vector<std::shared_ptr<MeshAsset>> meshes;
         std::vector<std::shared_ptr<Node>> nodes;
@@ -207,7 +222,7 @@ namespace ephemeral
         }
         auto& data = expectedData.get();
 
-        auto assetExpected = parser.loadGltf(data, filePath, gltfOptions);
+        auto assetExpected = parser.loadGltf(data, filePath.parent_path(), gltfOptions);
         if (assetExpected.has_error())
         {
             fmt::println("There was an error loading {}.\n{}", filePath.string(),
@@ -226,8 +241,10 @@ namespace ephemeral
                                          PSR{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 3 },
                                          PSR{ .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 } };
 
+        file->descriptorPool.init(ctx.device, ctx.allocator, asset.materials.size(), descriptorPoolSizes);
 
         // ------------------------ LOAD SAMPLERS ------------------------
+        file->samplers.reserve(asset.samplers.size());
         for (auto& gltfSampler : asset.samplers)
         {
             VkSamplerCreateInfo samplerInfo{
@@ -375,6 +392,7 @@ namespace ephemeral
                 // Load vertex positions
                 {
                     fastgltf::Accessor& accessor = asset.accessors[primitive.findAttribute("POSITION")->accessorIndex];
+                    vertices.resize(vertices.size() + accessor.count);
                     fastgltf::iterateAccessorWithIndex<flcn::Vec3F>(asset, accessor,
                                                                     [&](const flcn::Vec3F vertex, const size_t index) {
                                                                         Vertex vert;
@@ -503,6 +521,18 @@ namespace ephemeral
                 nodes[child]->parent = node;
             }
         }
+
+        // Add the top nodes(nodes with no parents) to the scene's list
+        for (auto& node : nodes)
+        {
+            if (node->parent.lock() == nullptr)
+            {
+                file->topNodes.push_back(node);
+                node->refreshTransform(flcn::Mat4F::identity());
+            }
+        }
+
+        fmt::println("Loaded {}!", filePath.string());
         return scene;
     }
 

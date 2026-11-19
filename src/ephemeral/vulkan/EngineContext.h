@@ -132,7 +132,8 @@ namespace ephemeral
         MaterialInstance defaultData;
         GLTFMetallicRoughness metalRoughMaterial;
         DrawContext mainDrawContext;
-        std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
+        std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;// Deprecated
+        std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
 
         Camera mainCamera;
     };
