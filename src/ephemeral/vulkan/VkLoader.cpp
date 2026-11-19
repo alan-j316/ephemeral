@@ -177,13 +177,13 @@ namespace ephemeral
 
 
     std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(EphemeralEngine& engine,
-                                                        const std::filesystem::path& filePath) noexcept
+                                                        const std::filesystem::path& filePath)
     {
         fmt::println("Loading {}...", filePath.string());
         auto& ctx = *engine._ctx;
 
         // ------------------------ INITIALIZATION ------------------------
-        const auto scene = std::make_shared<LoadedGLTF>(engine);
+        auto scene = std::make_shared<LoadedGLTF>(engine);
         const auto file  = scene.get();
         // Temporary array for storing the loaded assets
         std::vector<std::shared_ptr<MeshAsset>> meshes;
@@ -215,6 +215,7 @@ namespace ephemeral
             return std::nullopt;
         }
         auto& asset = assetExpected.get();
+
 
         // ------------------------ DESCRIPTOR POOL CONFIG ------------------------
         using PSR = DescriptorAllocatorResizable::PoolSizeRatio; // NOLINT

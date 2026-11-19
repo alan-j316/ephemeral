@@ -86,7 +86,7 @@ namespace ephemeral
 
 
     std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(EphemeralEngine& engine,
-                                                        const std::filesystem::path& filePath) noexcept;
+                                                        const std::filesystem::path& filePath);
 
 
     /// Convert from fastgltf sampling filters to VkFilter.
