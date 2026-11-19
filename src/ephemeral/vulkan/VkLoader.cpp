@@ -183,7 +183,33 @@ namespace ephemeral
 
     void LoadedGLTF::clearAll() noexcept
     {
-        // TODO: Impl
+        const VkDevice device = creator._ctx->device;
+        const auto allocator  = creator._ctx->allocator;
+        const auto vma        = creator._ctx->vma;
+
+        descriptorPool.destroy(device, allocator);
+        destroyBuffer(vma, materialBuffer);
+
+        for (const auto& meshAsset : meshes | std::views::values)
+        {
+            destroyBuffer(vma, meshAsset->meshBuffers.indexBuffer);
+            destroyBuffer(vma, meshAsset->meshBuffers.vertexBuffer);
+        }
+
+        for (const auto& image : images | std::views::values)
+        {
+            // Don't destroy the default image.
+            if (image.image == creator._ctx->errorCheckerBoardImage.image)
+            {
+                continue;
+            }
+            destroyImage(device, allocator, image, vma);
+        }
+
+        for (const auto& sampler : samplers)
+        {
+            vkDestroySampler(device, sampler, allocator);
+        }
     }
 
 

@@ -101,6 +101,8 @@ namespace ephemeral
                                                                           const std::filesystem::path&);
 
         friend std::optional<VulkanImage> loadImage(EphemeralEngine&, fastgltf::Asset&, fastgltf::Image&);
+
+        friend LoadedGLTF; // NOLINT
     };
 
 } // namespace ephemeral
