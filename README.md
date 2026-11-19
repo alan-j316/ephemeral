@@ -1,10 +1,11 @@
 [![Unit Tests](https://github.com/alanabrahampkochumon-zqict/CPP_Project_Template/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/alanabrahampkochumon-zqict/CPP_Project_Template/actions/workflows/unit-tests.yml)
 
-# Ephemeral: Simple Vulkan Renderer
+# Ephemeral
 
-API-decoupled Vulkan-based rendering engine(In active development).
+API-decoupled Vulkan-based rendering engine.
 
 ## Screenshots
+
 ![Vulkan Engine](docs/assets/Screenshot.png)
 
 # Prerequisites
@@ -36,6 +37,15 @@ Compile the entire project, including tests and benchmarks. Bash
 
 `cmake --build build`
 
+Or use an IDE of choice.
+
+## Controls
+
+- Use mouse for basic panning.
+- W/S: Move forward/backward.
+- A/D: Move left/right.
+- Q/E: Move up/down.
+
 ## Developer Utilities
 
 Run these targets to maintain code quality and documentation.
@@ -44,7 +54,7 @@ Run these targets to maintain code quality and documentation.
 
 - Generate Docs: cmake `--build build --target docs`
 
-
 ## Credits
+
 - [VkGuide.dev](https://vkguide.dev/)
 - [Khronos Vulkan Tutorial](https://docs.vulkan.org/tutorial/latest/00_Introduction.html)
