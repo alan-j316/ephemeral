@@ -15,6 +15,8 @@
 #include "Geometry.h"
 #include "VkEngine.h"
 #include "VkInitializer.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 
 // Specialization for fastgltf::ElementTraits for flcn
@@ -534,6 +536,104 @@ namespace ephemeral
 
         fmt::println("Loaded {}!", filePath.string());
         return scene;
+    }
+
+
+    std::optional<VulkanImage> loadImage(EphemeralEngine& engine, fastgltf::Asset& asset, fastgltf::Image& image)
+    {
+        VulkanImage newImage{};
+        int width, height, nChannels;
+        const auto& ctx = *engine._ctx;
+
+        // These are the returned values but, we are only handling URI, Vector and BufferView
+        // <std::monostate, sources::BufferView, sources::URI, sources::Array, sources::Vector, sources::CustomBuffer
+        // sources::ByteView, sources::Fallback>
+        std::visit(
+            fastgltf::visitor{
+                [](auto& arg) {},
+                [&](fastgltf::sources::URI& filePath) {
+                    // No offset support and only loads local files
+                    assert(filePath.fileByteOffset == 0 && "Unsupported texture path. Offset not supported!");
+                    assert(filePath.uri->isLocalPath() && "Unsupported texture path. Only local paths are supported!");
+
+                    const std::string path(filePath.uri->path().begin(), filePath.uri->path().end());
+                    const auto data = stbi_load(path.c_str(), &width, &height, &nChannels, 4);
+                    if (data != nullptr)
+                    {
+                        const VkExtent3D imageSize{ .width  = static_cast<uint32_t>(width),
+                                                    .height = static_cast<uint32_t>(height),
+                                                    .depth  = 1 };
+                        const ImageCreateConfig config{ .size       = imageSize,
+                                                        .format     = VK_FORMAT_R8G8B8A8_UNORM,
+                                                        .usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT,
+                                                        .mipmapped  = false };
+                        // NOTE: Image creation and upload are two separate phases.
+                        newImage = createImage(ctx.device, ctx.allocator, ctx.vma, config);
+                        engine.uploadImage(config, newImage, data);
+
+                        stbi_image_free(data);
+                    }
+                },
+                [&](const fastgltf::sources::Vector& vector) {
+                    const auto data =
+                        stbi_load_from_memory(reinterpret_cast<stbi_uc const*>(vector.bytes.data()),
+                                              static_cast<int>(vector.bytes.size()), &width, &height, &nChannels, 4);
+                    if (data != nullptr)
+                    {
+                        const VkExtent3D imageSize{ .width  = static_cast<uint32_t>(width),
+                                                    .height = static_cast<uint32_t>(height),
+                                                    .depth  = 1 };
+                        const ImageCreateConfig config{ .size       = imageSize,
+                                                        .format     = VK_FORMAT_R8G8B8A8_UNORM,
+                                                        .usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT,
+                                                        .mipmapped  = false };
+                        // NOTE: Image creation and upload are two separate phases.
+                        newImage = createImage(ctx.device, ctx.allocator, ctx.vma, config);
+                        engine.uploadImage(config, newImage, data);
+
+                        stbi_image_free(data);
+                    }
+                },
+                [&](const fastgltf::sources::BufferView& view) {
+                    const auto& bufferView = asset.bufferViews[view.bufferViewIndex];
+                    auto& buffer           = asset.buffers[bufferView.bufferIndex];
+                    // NOTE: Since we specified LoadExternalBuffers in the gltfOptions, all the buffers
+                    //       are loaded into vector.
+                    std::visit(fastgltf::visitor{
+                                   [](auto& arg) {},
+                                   [&](const fastgltf::sources::Vector& vector) {
+                                       const auto data = stbi_load_from_memory(
+                                           reinterpret_cast<stbi_uc const*>(vector.bytes.data()),
+                                           static_cast<int>(vector.bytes.size()), &width, &height, &nChannels, 4);
+                                       if (data != nullptr)
+                                       {
+                                           const VkExtent3D imageSize{ .width  = static_cast<uint32_t>(width),
+                                                                       .height = static_cast<uint32_t>(height),
+                                                                       .depth  = 1 };
+                                           const ImageCreateConfig config{ .size       = imageSize,
+                                                                           .format     = VK_FORMAT_R8G8B8A8_UNORM,
+                                                                           .usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT,
+                                                                           .mipmapped  = false };
+                                           // NOTE: Image creation and upload are two separate phases.
+                                           newImage = createImage(ctx.device, ctx.allocator, ctx.vma, config);
+                                           engine.uploadImage(config, newImage, data);
+
+                                           stbi_image_free(data);
+                                       }
+                                   } },
+                               buffer.data);
+                } },
+            image.data);
+
+
+        if (newImage.image == VK_NULL_HANDLE)
+        {
+            return std::nullopt;
+        }
+        else
+        {
+            return newImage;
+        }
     }
 
 } // namespace ephemeral

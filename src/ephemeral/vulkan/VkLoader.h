@@ -12,6 +12,7 @@
 
 #include "RenderPrimitives.h"
 #include "VkDescriptors.h"
+#include "VkEngine.h"
 #include "VkImages.h"
 #include "VkTypes.h"
 
@@ -87,6 +88,8 @@ namespace ephemeral
 
     std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(EphemeralEngine& engine,
                                                         const std::filesystem::path& filePath);
+
+    std::optional<VulkanImage> loadImage(EphemeralEngine& engine, fastgltf::Asset& asset, fastgltf::Image& image);
 
 
     /// Convert from fastgltf sampling filters to VkFilter.

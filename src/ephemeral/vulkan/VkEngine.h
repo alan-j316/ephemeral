@@ -11,7 +11,14 @@
 
 
 /// Forward declarations
+namespace fastgltf
+{
+    class Asset;  // NOLINT(readability-identifier-naming)
+    struct Image; // NOLINT(readability-identifier-naming)
+} // namespace fastgltf
 struct SDL_Window; // NOLINT(readability-identifier-naming)
+
+
 
 namespace ephemeral
 {
@@ -92,6 +99,8 @@ namespace ephemeral
         // NOLINTNEXTLINE
         friend std::optional<std::shared_ptr<struct LoadedGLTF>> loadGLTF(EphemeralEngine&,
                                                                           const std::filesystem::path&);
+
+        friend std::optional<VulkanImage> loadImage(EphemeralEngine&, fastgltf::Asset&, fastgltf::Image&);
     };
 
 } // namespace ephemeral
