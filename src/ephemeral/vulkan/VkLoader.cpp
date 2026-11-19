@@ -268,8 +268,18 @@ namespace ephemeral
         images.reserve(asset.images.size());
         for (auto& gltfImage : asset.images)
         {
-            images.push_back(ctx.errorCheckerBoardImage);
-            // TODO: Update later. checker board pattern for now.
+            // Try loading the image asset from gltf and if it doesn't exist
+            // load a default checkerboard asset.
+            if (auto loadedImage = loadImage(engine, asset, gltfImage); loadedImage.has_value())
+            {
+                images.push_back(*loadedImage);
+                file->images[gltfImage.name] = *loadedImage;
+            }
+            else
+            {
+                images.push_back(ctx.errorCheckerBoardImage);
+                fmt::println("Texture({}) failed to load!", gltfImage.name);
+            }
         }
 
 
@@ -544,85 +554,115 @@ namespace ephemeral
         VulkanImage newImage{};
         int width, height, nChannels;
         const auto& ctx = *engine._ctx;
-
+        VkExtent3D imageSize{ .depth = 1 };
+        ImageCreateConfig config{ .size       = imageSize,
+                                  .format     = VK_FORMAT_R8G8B8A8_UNORM,
+                                  .usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                  .mipmapped  = false };
         // These are the returned values but, we are only handling URI, Vector and BufferView
         // <std::monostate, sources::BufferView, sources::URI, sources::Array, sources::Vector, sources::CustomBuffer
         // sources::ByteView, sources::Fallback>
         std::visit(
             fastgltf::visitor{
-                [](auto& arg) {},
+                // External files
                 [&](fastgltf::sources::URI& filePath) {
                     // No offset support and only loads local files
                     assert(filePath.fileByteOffset == 0 && "Unsupported texture path. Offset not supported!");
                     assert(filePath.uri->isLocalPath() && "Unsupported texture path. Only local paths are supported!");
 
                     const std::string path(filePath.uri->path().begin(), filePath.uri->path().end());
-                    const auto data = stbi_load(path.c_str(), &width, &height, &nChannels, 4);
-                    if (data != nullptr)
+                    const auto dataRaw = stbi_load(path.c_str(), &width, &height, &nChannels, 4);
+                    if (dataRaw != nullptr)
                     {
-                        const VkExtent3D imageSize{ .width  = static_cast<uint32_t>(width),
-                                                    .height = static_cast<uint32_t>(height),
-                                                    .depth  = 1 };
-                        const ImageCreateConfig config{ .size       = imageSize,
-                                                        .format     = VK_FORMAT_R8G8B8A8_UNORM,
-                                                        .usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT,
-                                                        .mipmapped  = false };
                         // NOTE: Image creation and upload are two separate phases.
-                        newImage = createImage(ctx.device, ctx.allocator, ctx.vma, config);
-                        engine.uploadImage(config, newImage, data);
-
-                        stbi_image_free(data);
+                        imageSize.width  = width;
+                        imageSize.height = height;
+                        config.size      = imageSize;
+                        newImage         = createImage(ctx.device, ctx.allocator, ctx.vma, config);
+                        engine.uploadImage(config, newImage, dataRaw);
+                        stbi_image_free(dataRaw);
                     }
                 },
-                [&](const fastgltf::sources::Vector& vector) {
-                    const auto data =
+                // Internal Files(Base64)
+                [&](fastgltf::sources::Vector& vector) {
+                    const auto dataRaw =
                         stbi_load_from_memory(reinterpret_cast<stbi_uc const*>(vector.bytes.data()),
                                               static_cast<int>(vector.bytes.size()), &width, &height, &nChannels, 4);
-                    if (data != nullptr)
+                    if (dataRaw != nullptr)
                     {
-                        const VkExtent3D imageSize{ .width  = static_cast<uint32_t>(width),
-                                                    .height = static_cast<uint32_t>(height),
-                                                    .depth  = 1 };
-                        const ImageCreateConfig config{ .size       = imageSize,
-                                                        .format     = VK_FORMAT_R8G8B8A8_UNORM,
-                                                        .usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT,
-                                                        .mipmapped  = false };
                         // NOTE: Image creation and upload are two separate phases.
-                        newImage = createImage(ctx.device, ctx.allocator, ctx.vma, config);
-                        engine.uploadImage(config, newImage, data);
-
-                        stbi_image_free(data);
+                        imageSize.width  = width;
+                        imageSize.height = height;
+                        config.size      = imageSize;
+                        newImage         = createImage(ctx.device, ctx.allocator, ctx.vma, config);
+                        engine.uploadImage(config, newImage, dataRaw);
+                        stbi_image_free(dataRaw);
                     }
                 },
-                [&](const fastgltf::sources::BufferView& view) {
-                    const auto& bufferView = asset.bufferViews[view.bufferViewIndex];
-                    auto& buffer           = asset.buffers[bufferView.bufferIndex];
+                [&](fastgltf::sources::Array& array) {
+                    const auto dataRaw =
+                        stbi_load_from_memory(reinterpret_cast<stbi_uc const*>(array.bytes.data()),
+                                              static_cast<int>(array.bytes.size()), &width, &height, &nChannels, 4);
+                    if (dataRaw != nullptr)
+                    {
+                        // NOTE: Image creation and upload are two separate phases.
+                        imageSize.width  = width;
+                        imageSize.height = height;
+                        config.size      = imageSize;
+                        newImage         = createImage(ctx.device, ctx.allocator, ctx.vma, config);
+                        engine.uploadImage(config, newImage, dataRaw);
+                        stbi_image_free(dataRaw);
+                    }
+                },
+                // Embedded into the GLB
+                [&](fastgltf::sources::BufferView& view) {
+                    auto& bufferView = asset.bufferViews[view.bufferViewIndex];
+                    auto& buffer     = asset.buffers[bufferView.bufferIndex];
+
+                    auto& data = buffer.data;
                     // NOTE: Since we specified LoadExternalBuffers in the gltfOptions, all the buffers
                     //       are loaded into vector.
-                    std::visit(fastgltf::visitor{
-                                   [](auto& arg) {},
-                                   [&](const fastgltf::sources::Vector& vector) {
-                                       const auto data = stbi_load_from_memory(
-                                           reinterpret_cast<stbi_uc const*>(vector.bytes.data()),
-                                           static_cast<int>(vector.bytes.size()), &width, &height, &nChannels, 4);
-                                       if (data != nullptr)
-                                       {
-                                           const VkExtent3D imageSize{ .width  = static_cast<uint32_t>(width),
-                                                                       .height = static_cast<uint32_t>(height),
-                                                                       .depth  = 1 };
-                                           const ImageCreateConfig config{ .size       = imageSize,
-                                                                           .format     = VK_FORMAT_R8G8B8A8_UNORM,
-                                                                           .usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT,
-                                                                           .mipmapped  = false };
-                                           // NOTE: Image creation and upload are two separate phases.
-                                           newImage = createImage(ctx.device, ctx.allocator, ctx.vma, config);
-                                           engine.uploadImage(config, newImage, data);
+                    std::visit(
+                        fastgltf::visitor{
+                            [&](fastgltf::sources::Vector& vector) {
+                                const auto dataRaw = stbi_load_from_memory(
+                                    reinterpret_cast<stbi_uc const*>(vector.bytes.data() + bufferView.byteOffset),
+                                    static_cast<int>(vector.bytes.size()), &width, &height, &nChannels, 4);
+                                if (dataRaw != nullptr)
+                                {
+                                    imageSize.width  = width;
+                                    imageSize.height = height;
+                                    config.size      = imageSize;
+                                    // NOTE: Image creation and upload are two separate phases.
+                                    newImage = createImage(ctx.device, ctx.allocator, ctx.vma, config);
+                                    engine.uploadImage(config, newImage, dataRaw);
 
-                                           stbi_image_free(data);
-                                       }
-                                   } },
-                               buffer.data);
-                } },
+                                    stbi_image_free(dataRaw);
+                                }
+                            },
+                            [&](fastgltf::sources::Array& array) {
+                                const auto dataRaw = stbi_load_from_memory(
+                                    reinterpret_cast<stbi_uc const*>(array.bytes.data() + bufferView.byteOffset),
+                                    static_cast<int>(array.bytes.size()), &width, &height, &nChannels, 4);
+                                if (dataRaw != nullptr)
+                                {
+                                    // NOTE: Image creation and upload are two separate phases.
+                                    imageSize.width  = width;
+                                    imageSize.height = height;
+                                    config.size      = imageSize;
+                                    // NOTE: Image creation and upload are two separate phases.
+                                    newImage = createImage(ctx.device, ctx.allocator, ctx.vma, config);
+                                    engine.uploadImage(config, newImage, dataRaw);
+                                    stbi_image_free(dataRaw);
+                                }
+                            },
+                            [](auto&&) {} },
+                        buffer.data);
+                },
+                [image](auto&&) {
+                    fmt::println("Loader for {} not supported!", image.name);
+                },
+            },
             image.data);
 
 
@@ -632,6 +672,7 @@ namespace ephemeral
         }
         else
         {
+            fmt::println("Successfully loaded {}!", image.name);
             return newImage;
         }
     }
