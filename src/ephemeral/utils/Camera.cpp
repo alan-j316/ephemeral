@@ -36,6 +36,14 @@ namespace ephemeral
             {
                 velocity.x() = 1;
             }
+            if (e.key.scancode == SDL_SCANCODE_Q)
+            {
+                velocity.y() = 1;
+            }
+            if (e.key.scancode == SDL_SCANCODE_E)
+            {
+                velocity.y() = -1;
+            }
         }
 
         if (e.type == SDL_EVENT_KEY_UP)
@@ -55,6 +63,14 @@ namespace ephemeral
             if (e.key.scancode == SDL_SCANCODE_D)
             {
                 velocity.x() = 0;
+            }
+            if (e.key.scancode == SDL_SCANCODE_Q)
+            {
+                velocity.y() = 0;
+            }
+            if (e.key.scancode == SDL_SCANCODE_E)
+            {
+                velocity.y() = 0;
             }
         }
 
