@@ -153,54 +153,31 @@ namespace ephemeral
         // ------------------------ RENDER ------------------------
 
         // TODO: rename renderables to opaque surfaces
-        for (const RenderObject& draw : ctx.mainDrawContext.renderables)
-        {
-            vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipeline);
-            vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipelineLayout,
-                                    0, 1, &globalDescriptor, 0, nullptr);
-            vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipelineLayout,
-                                    1, 1, &draw.material->materialSet, 0, nullptr);
 
-            vkCmdBindIndexBuffer(cmdBuffer, draw.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        const auto draw = [&](const RenderObject& object) {
+            vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline->pipeline);
+            vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    object.material->pipeline->pipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
+            vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    object.material->pipeline->pipelineLayout, 1, 1, &object.material->materialSet, 0,
+                                    nullptr);
 
-            GPUDrawPushConstants pc{ .worldMatrix = draw.transform, .vertexBuffer = draw.vertexBufferAddress };
-            vkCmdPushConstants(cmdBuffer, draw.material->pipeline->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+            vkCmdBindIndexBuffer(cmdBuffer, object.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+            GPUDrawPushConstants pc{ .worldMatrix = object.transform, .vertexBuffer = object.vertexBufferAddress };
+            vkCmdPushConstants(cmdBuffer, object.material->pipeline->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
                                sizeof(GPUDrawPushConstants), &pc);
-            vkCmdDrawIndexed(cmdBuffer, draw.indexCount, 1, draw.firstIndex, 0, 0);
+            vkCmdDrawIndexed(cmdBuffer, object.indexCount, 1, object.firstIndex, 0, 0);
+        };
+
+        for (const RenderObject& object : ctx.mainDrawContext.opaqueObjects)
+        {
+            draw(object);
         }
-
-        // vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipeline);
-        //
-        // VkDescriptorSet imageSet =
-        //     currentFrame.frameDescriptors.allocate(ctx.device, ctx.singleImageDescriptorLayout, ctx.allocator);
-        // {
-        //     DescriptorWriter descriptorWriter;
-        //     descriptorWriter.writeImage(0, ctx.errorCheckerBoardImage.imageView, ctx.defaultSamplerNearest,
-        //                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        //                                 VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-        //     descriptorWriter.updateSet(ctx.device, imageSet);
-        // }
-        //
-        // vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx.meshPipelineLayout, 0, 1, &imageSet,
-        // 0,
-        //                         nullptr);
-        //
-        // flcn::Mat4F view  = flcn::Mat4F::identity();
-        // view(2, 3)        = -4;
-        // float aspectRatio = static_cast<float>(ctx.drawExtent.width) / static_cast<float>(ctx.drawExtent.height);
-        // float fov         = 1.22173f; // 70deg
-        // // NOTE: Swapping near and far values can increase quality of depth testing
-        // // REF : https://vkguide.dev/docs/new_chapter_3/loading_meshes/
-        // auto projection = makePersp(aspectRatio, fov, 0.1f, 10000.0f);
-        //
-        // const auto mesh = ctx.testMeshes[2];
-        // const GPUDrawPushConstants pc{ .worldMatrix  = projection * view,
-        //                                .vertexBuffer = mesh->meshBuffers.vertexBufferAddress };
-
-        // vkCmdPushConstants(cmdBuffer, ctx.meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-        // vkCmdBindIndexBuffer(cmdBuffer, mesh->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-        // vkCmdDrawIndexed(cmdBuffer, mesh->surfaces[0].count, 1, mesh->surfaces[0].startIndex, 0, 0);
-
+        for (const RenderObject& object : ctx.mainDrawContext.transparentObjects)
+        {
+            draw(object);
+        }
 
         vkCmdEndRendering(cmdBuffer);
     }
@@ -1225,7 +1202,8 @@ namespace ephemeral
         auto& cam = _ctx->mainCamera;
         cam.update();
 
-        _ctx->mainDrawContext.renderables.clear();
+        _ctx->mainDrawContext.opaqueObjects.clear();
+        _ctx->mainDrawContext.transparentObjects.clear();
 
         for (int x = -3; x < 3; ++x)
         {

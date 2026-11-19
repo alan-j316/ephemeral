@@ -30,7 +30,7 @@ namespace ephemeral
             obj.transform           = nodeMat;
             obj.vertexBufferAddress = mesh->meshBuffers.vertexBufferAddress;
 
-            ctx.renderables.push_back(obj);
+            ctx.opaqueObjects.push_back(obj);
         }
 
         Node::draw(topMatrix, ctx);

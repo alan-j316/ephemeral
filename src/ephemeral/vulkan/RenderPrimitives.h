@@ -55,7 +55,10 @@ namespace ephemeral
 
 
     struct DrawContext
-    { std::vector<RenderObject> renderables; };
+    {
+        std::vector<RenderObject> opaqueObjects;
+        std::vector<RenderObject> transparentObjects;
+    };
 
 
     // Base class for a renderable dynamic object
