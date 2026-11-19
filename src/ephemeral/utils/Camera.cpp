@@ -61,7 +61,7 @@ namespace ephemeral
         if (e.type == SDL_EVENT_MOUSE_MOTION)
         {
             yaw += e.motion.xrel * SENSITIVITY_MULTIPLIER;
-            pitch += e.motion.yrel * SENSITIVITY_MULTIPLIER;
+            pitch -= e.motion.yrel * SENSITIVITY_MULTIPLIER;
         }
     }
 } // namespace ephemeral
