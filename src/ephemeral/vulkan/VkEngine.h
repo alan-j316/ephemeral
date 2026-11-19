@@ -5,6 +5,7 @@
 #include "Geometry.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <span>
 #include <string>
 
@@ -87,6 +88,10 @@ namespace ephemeral
 
 
         [[nodiscard]] struct FrameData& currentFrame() const noexcept; // NOLINT(readability-identifier-naming)
+
+        // NOLINTNEXTLINE
+        friend std::optional<std::shared_ptr<struct LoadedGLTF>> loadGLTF(EphemeralEngine&,
+                                                                          const std::filesystem::path&) noexcept;
     };
 
 } // namespace ephemeral

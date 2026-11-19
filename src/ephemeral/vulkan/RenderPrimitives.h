@@ -102,14 +102,4 @@ namespace ephemeral
         }
     };
 
-
-    // A render graph node with a mesh
-    class MeshNode: public Node
-    {
-    public:
-        std::shared_ptr<struct MeshAsset> mesh; // NOLINT
-
-        void draw(const flcn::Mat4F& topMatrix, DrawContext& ctx) noexcept override;
-    };
-
 } // namespace ephemeral
