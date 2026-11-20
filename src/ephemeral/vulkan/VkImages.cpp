@@ -89,6 +89,72 @@ namespace ephemeral
             vkCmdPipelineBarrier2(cmdBuffer, &depInfo);
         }
 
+        void generateMipmaps(const VkCommandBuffer cmdBuffer, const VkImage image, VkExtent2D extent) noexcept
+        {
+            const uint32_t mipLevels =
+                static_cast<uint32_t>(std::floor(std::log2(std::max(extent.width, extent.height)))) + 1;
+            for (uint32_t mip = 0; mip < mipLevels; ++mip)
+            {
+                const VkExtent2D halfSize{ .width = extent.width / 2, .height = extent.height / 2 };
+
+                VkImageMemoryBarrier2 imageBarrier{ .sType         = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                                    .srcStageMask  = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                                    .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                                                    .dstStageMask  = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                                    .dstAccessMask =
+                                                        VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT,
+                                                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                    .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL };
+                VkImageAspectFlags aspectMask              = VK_IMAGE_ASPECT_COLOR_BIT;
+                imageBarrier.subresourceRange              = vkutils::imageSubresourceRange(aspectMask);
+                imageBarrier.subresourceRange.levelCount   = 1;
+                imageBarrier.subresourceRange.baseMipLevel = mip;
+                imageBarrier.image                         = image;
+
+                VkDependencyInfo depInfo{ .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                          .imageMemoryBarrierCount = 1,
+                                          .pImageMemoryBarriers    = &imageBarrier };
+                vkCmdPipelineBarrier2(cmdBuffer, &depInfo);
+
+                if (mip < mipLevels - 1)
+                {
+                    VkImageBlit2 blitRegion{ .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr };
+                    blitRegion.srcOffsets[1].x = static_cast<int32_t>(extent.width);
+                    blitRegion.srcOffsets[1].y = static_cast<int32_t>(extent.height);
+                    blitRegion.srcOffsets[1].z = 1;
+
+                    blitRegion.dstOffsets[1].x = static_cast<int32_t>(halfSize.width);
+                    blitRegion.dstOffsets[1].y = static_cast<int32_t>(halfSize.height);
+                    blitRegion.dstOffsets[1].z = 1;
+
+                    blitRegion.srcSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+                    blitRegion.srcSubresource.baseArrayLayer = 0;
+                    blitRegion.srcSubresource.layerCount     = 1;
+                    blitRegion.srcSubresource.mipLevel       = mip;
+
+                    blitRegion.dstSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+                    blitRegion.dstSubresource.baseArrayLayer = 0;
+                    blitRegion.dstSubresource.layerCount     = 1;
+                    blitRegion.dstSubresource.mipLevel       = mip;
+
+                    VkBlitImageInfo2 blitInfo{ .sType          = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+                                               .pNext          = nullptr,
+                                               .srcImage       = image,
+                                               .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                               .dstImage       = image,
+                                               .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                               .regionCount    = 1,
+                                               .pRegions       = &blitRegion,
+                                               .filter         = VK_FILTER_LINEAR };
+                    vkCmdBlitImage2(cmdBuffer, &blitInfo);
+                    extent = halfSize;
+                }
+            }
+
+            transitionImage(cmdBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+
 
         void copyImageToImage(const VkCommandBuffer cmdBuffer, const VkImage src, const VkImage dst,
                               const VkExtent2D srcSize, const VkExtent2D dstSize) noexcept

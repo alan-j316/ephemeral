@@ -43,6 +43,8 @@ namespace ephemeral
 
     namespace vkutils
     {
+        void generateMipmaps(VkCommandBuffer cmdBuffer, VkImage image, VkExtent2D extent) noexcept;
+
         void transitionImage(VkCommandBuffer cmdBuffer, VkImage img, VkImageLayout oldLayout,
                              VkImageLayout newLayout) noexcept;
 

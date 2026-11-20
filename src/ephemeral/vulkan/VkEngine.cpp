@@ -1287,8 +1287,15 @@ namespace ephemeral
 
             vkCmdCopyBufferToImage(cmdBuffer, stagingBuffer.buffer, outImage.image,
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-            vkutils::transitionImage(cmdBuffer, outImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            if (config.mipmapped)
+            {
+                vkutils::generateMipmaps(cmdBuffer, outImage.image, VkExtent2D{outImage.extent.width, outImage.extent.height});
+            }
+            else
+            {
+                vkutils::transitionImage(cmdBuffer, outImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            }
         });
 
         // Destroy the staging buffer.

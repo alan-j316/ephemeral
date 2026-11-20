@@ -621,7 +621,7 @@ namespace ephemeral
         ImageCreateConfig config{ .size       = imageSize,
                                   .format     = VK_FORMAT_R8G8B8A8_UNORM,
                                   .usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                                  .mipmapped  = false };
+                                  .mipmapped  = true };
         // These are the returned values but, we are only handling URI, Vector and BufferView
         // <std::monostate, sources::BufferView, sources::URI, sources::Array, sources::Vector, sources::CustomBuffer
         // sources::ByteView, sources::Fallback>

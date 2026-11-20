@@ -30,7 +30,7 @@ namespace ephemeral
 {
     inline bool isVisible(const RenderObject& object, const flcn::Mat4F& viewProj)
     {
-        const std::array corners{
+        constexpr std::array corners{
             flcn::Vec3F{ 1, 1, 1 },  flcn::Vec3F{ 1, 1, -1 },  flcn::Vec3F{ 1, -1, 1 },  flcn::Vec3F{ 1, -1, -1 },
             flcn::Vec3F{ -1, 1, 1 }, flcn::Vec3F{ -1, 1, -1 }, flcn::Vec3F{ -1, -1, 1 }, flcn::Vec3F{ -1, -1, -1 },
         };
@@ -40,10 +40,10 @@ namespace ephemeral
         flcn::Vec3F min{ 1.5, 1.5, 1.5 };
         flcn::Vec3F max{ -1.5, -1.5, -1.5 };
 
-        for (size_t i = 0; i < corners.size(); ++i)
+        for (auto corner : corners)
         {
             // Project each corner into clip space
-            flcn::Vec4 vert = matrix * flcn::Vec4F(object.bounds.origin + (corners[i] * object.bounds.extents), 1.0f);
+            flcn::Vec4 vert = matrix * flcn::Vec4F(object.bounds.origin + (corner * object.bounds.extents), 1.0f);
 
             // Perspective correction
             if (vert.w() > 1e-5)
