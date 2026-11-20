@@ -135,7 +135,7 @@ namespace ephemeral
                     blitRegion.dstSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
                     blitRegion.dstSubresource.baseArrayLayer = 0;
                     blitRegion.dstSubresource.layerCount     = 1;
-                    blitRegion.dstSubresource.mipLevel       = mip;
+                    blitRegion.dstSubresource.mipLevel       = mip + 1;
 
                     VkBlitImageInfo2 blitInfo{ .sType          = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
                                                .pNext          = nullptr,
