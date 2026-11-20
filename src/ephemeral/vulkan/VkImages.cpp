@@ -105,8 +105,8 @@ namespace ephemeral
                                                         VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT,
                                                     .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                                     .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL };
-                VkImageAspectFlags aspectMask              = VK_IMAGE_ASPECT_COLOR_BIT;
-                imageBarrier.subresourceRange              = vkutils::imageSubresourceRange(aspectMask);
+                constexpr VkImageAspectFlags aspectMask              = VK_IMAGE_ASPECT_COLOR_BIT;
+                imageBarrier.subresourceRange              = imageSubresourceRange(aspectMask);
                 imageBarrier.subresourceRange.levelCount   = 1;
                 imageBarrier.subresourceRange.baseMipLevel = mip;
                 imageBarrier.image                         = image;

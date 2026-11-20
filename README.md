@@ -4,6 +4,8 @@
 
 API-decoupled Vulkan-based rendering engine.
 
+_NOTE: Only works on MSVC compiler_
+
 ## Screenshots
 
 ![Vulkan Engine](docs/assets/Screenshot.png)
@@ -38,6 +40,19 @@ Compile the entire project, including tests and benchmarks. Bash
 `cmake --build build`
 
 Or use an IDE of choice.
+
+## Program Usage
+
+`Ephemeral.exe assets/structure.glb assets/basicmesh.glb`
+
+`Ephemeral.exe` *(loads default scene, if present)*
+
+**Note:** The executable is not standalone and must be placed in the parent directory of the `shaders/` folder;
+missing shader binaries will cause pipeline creation failures. Assets can be loaded via command-line arguments.
+Providing no valid assets will cause the program to exit/crash.
+
+**Known Limitation:** Scene loading currently relies on explicit texture and mesh names inside the glTF/GLB file.
+Assets with unnamed textures or meshes are not yet supported.
 
 ## Controls
 

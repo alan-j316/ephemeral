@@ -38,56 +38,6 @@
                 "CMAKE_CXX_COMPILER": "cl",
                 "CMAKE_C_COMPILER": "cl"
             }
-        },
-        {
-            "name": "Clang-Debug",
-            "displayName": "Clang Debug",
-            "inherits": "base-windows",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_CXX_COMPILER": "clang-cl",
-                "CMAKE_C_COMPILER": "clang-cl"
-            }
-        },
-        {
-            "name": "Clang-Release",
-            "displayName": "Clang Release",
-            "inherits": "base-windows",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_CXX_COMPILER": "clang-cl",
-                "CMAKE_C_COMPILER": "clang-cl"
-            }
-        },
-        {
-            "name": "GCC-Debug",
-            "displayName": "GCC Debug",
-            "inherits": "base-windows",
-            "vendor": {
-                "jetbrains.com/clion": {
-                    "toolchain": "MinGW"
-                }
-            },
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_CXX_COMPILER": "g++",
-                "CMAKE_C_COMPILER": "gcc"
-            }
-        },
-        {
-            "name": "GCC-Release",
-            "displayName": "GCC Release",
-            "inherits": "base-windows",
-            "vendor": {
-                "jetbrains.com/clion": {
-                    "toolchain": "MinGW"
-                }
-            },
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_CXX_COMPILER": "g++",
-                "CMAKE_C_COMPILER": "gcc"
-            }
         }
     ]
 }
