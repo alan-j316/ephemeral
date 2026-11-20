@@ -25,6 +25,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <VkBootstrap.h>
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <chrono>
@@ -108,6 +109,32 @@ namespace ephemeral
         ctx.stats.triangleCount = 0;
         // Begin clock
         auto start = std::chrono::system_clock::now();
+
+        // ------------------------ SORTING ------------------------
+        [[maybe_unused]] std::vector<uint32_t> opaqueDraws;
+        if constexpr (ENABLE_MESH_SORT)
+        {
+            opaqueDraws.reserve(ctx.mainDrawContext.opaqueObjects.size());
+
+            for (uint32_t i = 0; i < ctx.mainDrawContext.opaqueObjects.size(); ++i)
+            {
+                opaqueDraws.push_back(i);
+            }
+
+            // Sort the opaque surfaces by material and mesh
+            std::ranges::sort(opaqueDraws.begin(), opaqueDraws.end(), [&](const auto aIdx, const auto bIdx) {
+                const RenderObject& a = ctx.mainDrawContext.opaqueObjects[aIdx];
+                const RenderObject& b = ctx.mainDrawContext.opaqueObjects[bIdx];
+                if (a.material == b.material)
+                {
+                    return a.indexBuffer < b.indexBuffer;
+                }
+                else
+                {
+                    return a.material < b.material;
+                }
+            });
+        }
 
         // ------------------------ PER FRAME DESCRIPTOR ------------------------
         AllocatedBuffer gpuSceneBuffer = createBuffer(sizeof(GPUSceneData), ctx.vma, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -201,9 +228,19 @@ namespace ephemeral
             ctx.stats.triangleCount += object.indexCount / 3;
         };
 
-        for (const RenderObject& object : ctx.mainDrawContext.opaqueObjects)
+        if constexpr (ENABLE_MESH_SORT)
         {
-            draw(object);
+            for (const auto objIdx : opaqueDraws)
+            {
+                draw(ctx.mainDrawContext.opaqueObjects[objIdx]);
+            }
+        }
+        else
+        {
+            for (const auto& object : ctx.mainDrawContext.opaqueObjects)
+            {
+                draw(object);
+            }
         }
         for (const RenderObject& object : ctx.mainDrawContext.transparentObjects)
         {
