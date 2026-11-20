@@ -348,12 +348,6 @@ namespace ephemeral
         _ctx->mainCamera.pitch    = 0;
         _ctx->mainCamera.yaw      = 0;
 
-        // Loading structure glb
-        const auto structureFile = loadGLTF(*this, "assets/structure.glb");
-        assert(structureFile.has_value() && "File loading failed!");
-        _ctx->loadedScenes["structure"] = *structureFile;
-
-
         // everything went fine
         _isInitialized = true;
     }
@@ -613,7 +607,13 @@ namespace ephemeral
 
             if (ImGui::Begin("Stats"))
             {
-                ImGui::Text("Frame time: %0.03f ms", _ctx->stats.frameTime);
+
+                ImGui::Text("Loaded Assets");
+                for (const auto& sceneName : _ctx->loadedScenes | std::views::keys)
+                {
+                    ImGui::Text("%s", sceneName.c_str());
+                }
+                ImGui::Separator();
                 ImGui::Text("Draw time: %0.03f ms", _ctx->stats.meshDrawTime);
                 ImGui::Text("Update time: %0.03f ms", _ctx->stats.sceneUpdateTime);
                 ImGui::Text("Triangles: %i", _ctx->stats.triangleCount);
@@ -629,6 +629,19 @@ namespace ephemeral
             auto end              = std::chrono::system_clock::now();
             auto elapsed          = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
             _ctx->stats.frameTime = static_cast<float>(elapsed.count()) / 1000.0f;
+        }
+    }
+
+    /// Loads the given files into the engine.
+    /// @note Only supports .glb and .gltf files.
+    void EphemeralEngine::load(const std::span<const char* const> assets) noexcept
+    {
+        for (auto& asset : assets)
+        {
+            // Loading structure glb
+            const auto structureFile = loadGLTF(*this, asset);
+            assert(structureFile.has_value() && "File loading failed!");
+            _ctx->loadedScenes[asset] = *structureFile;
         }
     }
 
@@ -1195,7 +1208,8 @@ namespace ephemeral
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
             if (config.mipmapped)
             {
-                vkutils::generateMipmaps(cmdBuffer, outImage.image, VkExtent2D{outImage.extent.width, outImage.extent.height});
+                vkutils::generateMipmaps(cmdBuffer, outImage.image,
+                                         VkExtent2D{ outImage.extent.width, outImage.extent.height });
             }
             else
             {
@@ -1220,7 +1234,7 @@ namespace ephemeral
         _ctx->mainDrawContext.opaqueObjects.clear();
         _ctx->mainDrawContext.transparentObjects.clear();
 
-        constexpr float fov            = 1.22173f; // 70deg
+        constexpr float fov  = 1.22173f; // 70deg
         _ctx->sceneData.view = cam.getViewMatrix();
         _ctx->sceneData.proj = makePersp(
             static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), fov, 0.1f, 10000.0f);
@@ -1230,7 +1244,10 @@ namespace ephemeral
         _ctx->sceneData.sunlightColor = flcn::Vec4F::one();
         _ctx->sceneData.sunlightDir   = flcn::Vec4F(0.0f, 1.0f, 0.5f, 1.0f);
 
-        _ctx->loadedScenes["structure"]->draw(flcn::Mat4F::identity(), _ctx->mainDrawContext);
+        for (const auto& scene : _ctx->loadedScenes | std::views::values)
+        {
+            scene->draw(flcn::Mat4F::identity(), _ctx->mainDrawContext);
+        }
 
         // PROFILING
         const auto end              = std::chrono::system_clock::now();

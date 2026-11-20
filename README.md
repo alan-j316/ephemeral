@@ -6,7 +6,7 @@ API-decoupled Vulkan-based rendering engine.
 
 ## Screenshots
 
-![Vulkan Engine](docs/assets/Screenshot.old.png)
+![Vulkan Engine](docs/assets/Screenshot.png)
 
 # Prerequisites
 

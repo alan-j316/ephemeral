@@ -42,6 +42,8 @@ namespace ephemeral
         // run main loop
         void run();
 
+        void load(std::span<const char* const> assets) noexcept;
+
         // TODO: Move back to private
         void uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices,
                         struct GPUMeshBuffers& outBuffer) const noexcept; // NOLINT(readability-identifier-naming)
