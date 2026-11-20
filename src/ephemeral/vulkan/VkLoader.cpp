@@ -10,6 +10,7 @@
 
 
 #include "VkLoader.h"
+#include "Extra.h"
 
 #include "EngineContext.h"
 #include "Geometry.h"
@@ -37,9 +38,31 @@ struct fastgltf::ElementTraits<flcn::Vec4F>
 {};
 
 
-
 namespace ephemeral
 {
+    void MeshNode::draw(const flcn::Mat4F& topMatrix, DrawContext& ctx) noexcept
+    {
+        const flcn::Mat4F nodeMat = topMatrix * worldTransform;
+
+        // Construct a render object for each surface and push it to the draw context
+        for (auto& [startIndex, count, bounds, material] : mesh->surfaces)
+        {
+            RenderObject obj;
+            obj.firstIndex  = startIndex;
+            obj.indexCount  = count;
+            obj.indexBuffer = mesh->meshBuffers.indexBuffer.buffer;
+            obj.material    = &material->material;
+            obj.bounds = bounds;
+
+            obj.transform           = nodeMat;
+            obj.vertexBufferAddress = mesh->meshBuffers.vertexBufferAddress;
+
+            ctx.opaqueObjects.push_back(obj);
+        }
+
+        Node::draw(topMatrix, ctx);
+    }
+
 
     std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(
         EphemeralEngine& engine, const std::filesystem::path& filePath) noexcept
@@ -237,7 +260,6 @@ namespace ephemeral
         fastgltf::Parser parser{};
         constexpr auto gltfOptions = fastgltf::Options::AllowDouble | fastgltf::Options::LoadExternalBuffers;
         // fastgltf::Options::LoadExternalImages;
-
 
 
         // ------------------------ GLTF LOADING ------------------------
@@ -491,6 +513,21 @@ namespace ephemeral
                 {
                     surface.material = materials[0];
                 }
+
+                // Bounding box calculation
+                auto minPos = vertices[initialVertex].position;
+                auto maxPos = vertices[initialVertex].position;
+                for (size_t i = initialVertex; i < vertices.size(); ++i)
+                {
+                    minPos = flcn::min(minPos, vertices[i].position);
+                    maxPos = flcn::max(maxPos, vertices[i].position);
+                }
+
+                // Compute origin, extent, and radius.
+                surface.bounds.origin       = (maxPos + minPos) / 2.0f;
+                surface.bounds.extents      = (maxPos - minPos) / 2.0f;
+                surface.bounds.sphereRadius = surface.bounds.extents.mag();
+
                 mesh->surfaces.push_back(surface);
             }
 

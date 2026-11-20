@@ -10,7 +10,6 @@
  */
 
 
-#include "RenderPrimitives.h"
 #include "VkDescriptors.h"
 #include "VkEngine.h"
 #include "VkImages.h"
@@ -21,13 +20,51 @@
 
 namespace ephemeral
 {
+    enum class MaterialPass : uint8_t
+    {
+        OPAQUE,
+        TRANSPARENT,
+        MAIN_COLOR,
+        OTHER
+    };
+
+
+    /// Pipeline abstraction
+    struct MaterialPipeline
+    {
+        VkPipeline pipeline;
+        VkPipelineLayout pipelineLayout;
+    };
+
+
+    /// Pipeline and descriptor abstraction for a material
+    struct MaterialInstance
+    {
+        MaterialPipeline* pipeline;
+        VkDescriptorSet materialSet;
+        MaterialPass passType;
+    };
+
+    // Forward Declaration
+    class EphemeralEngine; // NOLINT
+
+
     struct GLTFMaterial
     { MaterialInstance material; };
+
+    struct Bounds
+    {
+        flcn::Vec3F origin;
+        float sphereRadius;
+        flcn::Vec3F extents;
+    };
+
 
     struct GeoSurface
     {
         uint32_t startIndex;
         uint32_t count;
+        Bounds bounds;
         std::shared_ptr<GLTFMaterial> material;
     };
 
@@ -39,13 +76,75 @@ namespace ephemeral
     };
 
 
-    // Forward Declaration
-    class EphemeralEngine; // NOLINT
-
     /// @deprecated Use loadGLTF
     std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(
         EphemeralEngine& engine, const std::filesystem::path& filePath) noexcept;
 
+
+    /// Flattened abstraction for a single draw call.
+    struct RenderObject
+    {
+        uint32_t indexCount;
+        uint32_t firstIndex;
+        VkBuffer indexBuffer;
+        Bounds bounds;
+        MaterialInstance* material;
+
+        flcn::Mat4F transform;
+        VkDeviceAddress vertexBufferAddress;
+    };
+
+
+    struct DrawContext
+    {
+        std::vector<RenderObject> opaqueObjects;
+        std::vector<RenderObject> transparentObjects;
+    };
+
+
+    // Base class for a renderable dynamic object
+    class IRenderable
+    {
+    public:
+        virtual ~IRenderable() = default;
+
+        virtual void draw(const flcn::Mat4F& topMatrix, DrawContext& ctx) noexcept = 0;
+    };
+
+
+
+    // Scene node.
+    // Can hold children and parents transformation will propagate to them.
+    class Node: public IRenderable
+    {
+    public:
+        // Parent pointer must be a weak pointer to avoid circular dependencies
+        std::weak_ptr<Node> parent;
+        std::vector<std::shared_ptr<Node>> children;
+
+        flcn::Mat4F localTransform;
+        flcn::Mat4F worldTransform;
+
+        // Update the parents world transform and propagate the new world transform down to the children.
+        void refreshTransform(const flcn::Mat4F& parentMatrix)
+        {
+            worldTransform = parentMatrix * localTransform;
+            for (const auto& child : children)
+            {
+                child->refreshTransform(worldTransform);
+            }
+        }
+
+        // Draw the node.
+        void draw(const flcn::Mat4F& topMatrix, DrawContext& ctx) noexcept override
+        {
+            // Draw child nodes
+            for (const auto& child : children)
+            {
+                child->draw(topMatrix, ctx);
+            }
+        }
+    };
 
 
     // A render graph node with a mesh
@@ -86,8 +185,7 @@ namespace ephemeral
     };
 
 
-    std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(EphemeralEngine& engine,
-                                                        const std::filesystem::path& filePath);
+    std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(EphemeralEngine& engine, const std::filesystem::path& filePath);
 
     std::optional<VulkanImage> loadImage(EphemeralEngine& engine, fastgltf::Asset& asset, fastgltf::Image& image);
 

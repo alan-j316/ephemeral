@@ -12,9 +12,9 @@
 #include "VkEngine.h"
 
 #include "EngineContext.h"
+#include "Extra.h"
 #include "GLTFMetallicRoughness.h"
 #include "Geometry.h"
-#include "RenderPrimitives.h"
 #include "VkDescriptors.h"
 #include "VkImages.h"
 #include "VkInitializer.h"
@@ -118,7 +118,10 @@ namespace ephemeral
 
             for (uint32_t i = 0; i < ctx.mainDrawContext.opaqueObjects.size(); ++i)
             {
-                opaqueDraws.push_back(i);
+                if (isVisible(ctx.mainDrawContext.opaqueObjects[i], ctx.sceneData.viewProj))
+                {
+                    opaqueDraws.push_back(i);
+                }
             }
 
             // Sort the opaque surfaces by material and mesh
@@ -232,6 +235,7 @@ namespace ephemeral
         {
             for (const auto objIdx : opaqueDraws)
             {
+                // Visibility culling is done priority to copying indices
                 draw(ctx.mainDrawContext.opaqueObjects[objIdx]);
             }
         }
@@ -239,7 +243,11 @@ namespace ephemeral
         {
             for (const auto& object : ctx.mainDrawContext.opaqueObjects)
             {
-                draw(object);
+
+                if (isVisible(object, ctx.sceneData.viewProj))
+                {
+                    draw(object);
+                }
             }
         }
         for (const RenderObject& object : ctx.mainDrawContext.transparentObjects)

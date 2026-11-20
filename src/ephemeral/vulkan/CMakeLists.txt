@@ -10,7 +10,6 @@ add_library(
         VkLoader.cpp
         VMA.cpp
         GLTFMetallicRoughness.cpp
-        RenderPrimitives.cpp
 )
 
 target_sources(
@@ -30,9 +29,9 @@ target_sources(
         VkLoader.h
         VkPipelines.h
         VkTypes.h
-        RenderPrimitives.h
         GLTFMetallicRoughness.h
         EngineContext.h
+        Extra.h
 )
 
 
