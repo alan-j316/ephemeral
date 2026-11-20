@@ -101,8 +101,14 @@ namespace ephemeral
 
 
     inline static void drawGeometry(const VkCommandBuffer cmdBuffer, FrameData& currentFrame,
-                                    const EphemeralEngineContext& ctx) noexcept
+                                    EphemeralEngineContext& ctx) noexcept
     {
+        // PROFILING
+        ctx.stats.drawCallCount = 0;
+        ctx.stats.triangleCount = 0;
+        // Begin clock
+        auto start = std::chrono::system_clock::now();
+
         // ------------------------ PER FRAME DESCRIPTOR ------------------------
         AllocatedBuffer gpuSceneBuffer = createBuffer(sizeof(GPUSceneData), ctx.vma, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                                       VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -151,9 +157,6 @@ namespace ephemeral
 
 
         // ------------------------ RENDER ------------------------
-
-        // TODO: rename renderables to opaque surfaces
-
         const auto draw = [&](const RenderObject& object) {
             vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline->pipeline);
             vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -164,10 +167,15 @@ namespace ephemeral
 
             vkCmdBindIndexBuffer(cmdBuffer, object.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-            GPUDrawPushConstants pc{ .worldMatrix = object.transform, .vertexBuffer = object.vertexBufferAddress };
+            const GPUDrawPushConstants pc{ .worldMatrix  = object.transform,
+                                           .vertexBuffer = object.vertexBufferAddress };
             vkCmdPushConstants(cmdBuffer, object.material->pipeline->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
                                sizeof(GPUDrawPushConstants), &pc);
             vkCmdDrawIndexed(cmdBuffer, object.indexCount, 1, object.firstIndex, 0, 0);
+
+            // PROFILING
+            ++ctx.stats.drawCallCount;
+            ctx.stats.triangleCount += object.indexCount / 3;
         };
 
         for (const RenderObject& object : ctx.mainDrawContext.opaqueObjects)
@@ -180,6 +188,11 @@ namespace ephemeral
         }
 
         vkCmdEndRendering(cmdBuffer);
+
+        // PROFILING
+        auto end               = std::chrono::system_clock::now();
+        auto elapsed           = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        ctx.stats.meshDrawTime = static_cast<float>(elapsed.count()) / 1000.0f;
     }
 
 
@@ -470,6 +483,8 @@ namespace ephemeral
         // main loop
         while (!bQuit)
         {
+            // Begin clock
+            auto start = std::chrono::system_clock::now();
             // Handle events on queue
             while (SDL_PollEvent(&e) != 0)
             {
@@ -525,12 +540,27 @@ namespace ephemeral
                 ImGui::InputFloat4("Data 2", reinterpret_cast<float*>(&effect.data.data2));
                 ImGui::InputFloat4("Data 3", reinterpret_cast<float*>(&effect.data.data3));
                 ImGui::InputFloat4("Data 4", reinterpret_cast<float*>(&effect.data.data4));
+                ImGui::End();
             }
-            ImGui::End();
+
+            if (ImGui::Begin("Stats"))
+            {
+                ImGui::Text("Frame time: %0.03f ms", _ctx->stats.frameTime);
+                ImGui::Text("Draw time: %0.03f ms", _ctx->stats.meshDrawTime);
+                ImGui::Text("Update time: %0.03f ms", _ctx->stats.sceneUpdateTime);
+                ImGui::Text("Triangles: %i", _ctx->stats.triangleCount);
+                ImGui::Text("Draw Calls: %i", _ctx->stats.drawCallCount);
+                ImGui::End();
+            }
 
             ImGui::Render();
 
             draw();
+
+            // Calculate runtime
+            auto end              = std::chrono::system_clock::now();
+            auto elapsed          = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            _ctx->stats.frameTime = static_cast<float>(elapsed.count()) / 1000.0f;
         }
     }
 
@@ -767,8 +797,10 @@ namespace ephemeral
         DescriptorSetLayoutBuilder sceneLayoutBuilder;
         sceneLayoutBuilder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         // TODO: Updated to both vertex and fragment shader
+        // NOLINTBEGIN
         _ctx->sceneDescriptorSetLayout = sceneLayoutBuilder.build(
             _ctx->device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, _ctx->allocator);
+        // NOLINTEND
 
         // TEXTURE SAMPLER DESCRIPTORS
         DescriptorSetLayoutBuilder imageDescriptorLayoutBuilder;
@@ -1109,9 +1141,8 @@ namespace ephemeral
         materialResources.dataBuffer   = materialConstants.buffer;
         materialResources.bufferOffset = 0;
 
-        // TODO: UPdate to main color MaterialPass::MAIN_COLOR
-        _ctx->defaultData = _ctx->metalRoughMaterial.writeMaterial(_ctx->device, MaterialPass::OPAQUE, _ctx->allocator,
-                                                                   materialResources, _ctx->gDescriptorAllocator);
+        _ctx->defaultData = _ctx->metalRoughMaterial.writeMaterial(
+            _ctx->device, MaterialPass::MAIN_COLOR, _ctx->allocator, materialResources, _ctx->gDescriptorAllocator);
 
         _ctx->mainDeletionQueue.push([&, materialConstants] {
             destroyBuffer(_ctx->vma, materialConstants);
@@ -1199,6 +1230,9 @@ namespace ephemeral
 
     void EphemeralEngine::updateScene() noexcept
     {
+        // PROFILING
+        const auto start = std::chrono::system_clock::now();
+
         auto& cam = _ctx->mainCamera;
         cam.update();
 
@@ -1233,6 +1267,11 @@ namespace ephemeral
         _ctx->sceneData.sunlightDir   = flcn::Vec4F(0.0f, 1.0f, 0.5f, 1.0f);
 
         _ctx->loadedScenes["structure"]->draw(flcn::Mat4F::identity(), _ctx->mainDrawContext);
+
+        // PROFILING
+        const auto end              = std::chrono::system_clock::now();
+        const auto elapsed          = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        _ctx->stats.sceneUpdateTime = static_cast<float>(elapsed.count()) / 1000.0f;
     }
 
 

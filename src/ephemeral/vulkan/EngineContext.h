@@ -21,12 +21,19 @@
 
 namespace ephemeral
 {
-
-
     // Config variables
     static constexpr auto ENGINE_NAME               = "Ephemeral";
     static constexpr bool VALIDATION_LAYERS_ENABLED = true;
     static constexpr size_t FRAME_OVERLAP           = 2; // Triple buffering
+
+    struct EngineStats
+    {
+        float frameTime;
+        uint32_t triangleCount;
+        uint32_t drawCallCount;
+        float sceneUpdateTime;
+        float meshDrawTime;
+    };
 
     struct FrameData
     {
@@ -132,9 +139,10 @@ namespace ephemeral
         MaterialInstance defaultData;
         GLTFMetallicRoughness metalRoughMaterial;
         DrawContext mainDrawContext;
-        std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;// Deprecated
+        std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes; // Deprecated
         std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
 
         Camera mainCamera;
+        EngineStats stats;
     };
 } // namespace ephemeral
