@@ -1,51 +1,59 @@
 name: Application Build
 
 on:
-    push:
-        branches: ["main"]
-    pull_request:
-        branches: ["main"]
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-    build:
-        runs-on: ${{ matrix.os }}
+  build:
+    runs-on: ${{ matrix.os }}
 
-        strategy:
-            # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
-            fail-fast: true
-            matrix:
-                os: [windows-latest]
-                build_type: [Debug, Release]
-                c_compiler: [cl]
-                include:
-                    - os: windows-latest
-                      c_compiler: cl
-                      cpp_compiler: cl
+    strategy:
+      # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
+      fail-fast: true
+      matrix:
+        os: [ windows-latest ]
+        build_type: [ Debug, Release ]
+        c_compiler: [ cl ]
+        include:
+          - os: windows-latest
+            c_compiler: cl
+            cpp_compiler: cl
 
-        steps:
-            - uses: actions/checkout@v5
+    steps:
+      - uses: actions/checkout@v5
 
-            - name: Set reusable strings
-              id: strings
-              shell: bash
-              run: |
-                  echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-            - name: Enable MSVC Developer Command Prompt
-              uses: TheMrMilchmann/setup-msvc-dev@v4
-              with:
-                  arch: x64
-              if: matrix.os == 'windows-latest'
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@v1.8.1
+        with:
+          vulkan_version: latest
+          cache: true
+          install_runtime: true  # Installs vulkan-1.dll runtime on Windows
+          install_lavapipe: true
 
-            - name: Configure CMake
-              run: >
-                  cmake -B ${{ steps.strings.outputs.build-output-dir }}
-                  -G Ninja
-                  -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-                  -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-                  -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-                  -D ENABLE_STRICT=ON
-                  -S ${{ github.workspace }}
+      - name: Enable MSVC Developer Command Prompt
+        uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: x64
+        if: matrix.os == 'windows-latest'
 
-            - name: Build
-              run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+      - name: Configure CMake
+        run: >
+          cmake -B ${{ steps.strings.outputs.build-output-dir }}
+          -G Ninja
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -D ENABLE_STRICT=ON
+          -S ${{ github.workspace }}
+
+      - name: Build
+        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}

@@ -16,6 +16,8 @@ Ensure the following tools are installed and available in your system PATH:
 
 - <a href="https://cmake.org/download/" target="_blank">CMake</a> (3.25+): Build system generator.
 
+- <a href="https://vulkan.lunarg.com/sdk/home" target="_blank">Vulkan</a> 1.3+: Graphics API.
+
 - <a href="https://git-scm.com/install/windows" target="_blank">Git</a>: Required for FetchContent dependency
   management.
 
