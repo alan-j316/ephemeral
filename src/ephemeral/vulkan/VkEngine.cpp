@@ -870,14 +870,7 @@ namespace ephemeral
             _ctx->device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, _ctx->allocator);
         // NOLINTEND
 
-        // TEXTURE SAMPLER DESCRIPTORS
-        DescriptorSetLayoutBuilder imageDescriptorLayoutBuilder;
-        imageDescriptorLayoutBuilder.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-        _ctx->singleImageDescriptorLayout =
-            imageDescriptorLayoutBuilder.build(_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, _ctx->allocator);
-
         _ctx->mainDeletionQueue.push([&] {
-            vkDestroyDescriptorSetLayout(_ctx->device, _ctx->singleImageDescriptorLayout, _ctx->allocator);
             vkDestroyDescriptorSetLayout(_ctx->device, _ctx->sceneDescriptorSetLayout, _ctx->allocator);
             _ctx->gDescriptorAllocator.destroy(_ctx->device, _ctx->allocator);
             vkDestroyDescriptorSetLayout(_ctx->device, _ctx->drawImageDescriptorSetLayout, _ctx->allocator);
@@ -888,8 +881,6 @@ namespace ephemeral
     void EphemeralEngine::initPipelines() noexcept
     {
         initBackgroundPipelines();
-        initMeshPipelines();
-
         _ctx->metalRoughMaterial.buildPipelines(*_ctx);
     }
 
@@ -972,64 +963,6 @@ namespace ephemeral
         _ctx->mainDeletionQueue.push([&] {
             vkDestroyPipelineLayout(_ctx->device, _ctx->gradientPipelineLayout, _ctx->allocator);
             vkDestroyPipeline(_ctx->device, _ctx->gradientPipeline, _ctx->allocator);
-        });
-    }
-
-
-    void EphemeralEngine::initMeshPipelines() noexcept
-    {
-        // ------------------------ SHADER MODULES ------------------------
-        VkShaderModule vertexShader, fragmentShader;
-        if (!vkutils::loadShaderModule("shaders/ColoredTriangleMesh.vert.spv", _ctx->device, _ctx->allocator,
-                                       &vertexShader))
-        {
-            fmt::println("There was an error loading the mesh vertex shader");
-            return;
-        }
-        if (!vkutils::loadShaderModule("shaders/TextureImage.frag.spv", _ctx->device, _ctx->allocator, &fragmentShader))
-        {
-            fmt::println("There was an error loading the mesh fragment shader");
-            return;
-        }
-
-
-        // ------------------------ PIPELINE LAYOUT ------------------------
-        VkPushConstantRange pushConstants{ .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-                                           .offset     = 0,
-                                           .size       = sizeof(GPUDrawPushConstants) };
-
-        VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkutils::pipelineLayoutCreateInfo();
-        pipelineLayoutInfo.pushConstantRangeCount     = 1;
-        pipelineLayoutInfo.pPushConstantRanges        = &pushConstants;
-        pipelineLayoutInfo.setLayoutCount             = 1;
-        pipelineLayoutInfo.pSetLayouts                = &_ctx->singleImageDescriptorLayout;
-
-        VK_CHECK(vkCreatePipelineLayout(_ctx->device, &pipelineLayoutInfo, _ctx->allocator, &_ctx->meshPipelineLayout));
-
-
-        // ------------------------ PIPELINE BUILD ------------------------
-        PipelineBuilder pipelineBuilder;
-        pipelineBuilder.setPipelineLayout(_ctx->meshPipelineLayout);
-        pipelineBuilder.setShaderStages(vertexShader, fragmentShader);
-        pipelineBuilder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        pipelineBuilder.setPolygonMode(VK_POLYGON_MODE_FILL);
-        pipelineBuilder.setCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-        pipelineBuilder.disableMSAA();
-        pipelineBuilder.enableAdditiveBlending();
-        pipelineBuilder.setDepthTestState(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-
-        pipelineBuilder.setColorAttachmentFormat(_ctx->drawImage.format);
-        pipelineBuilder.setDepthAttachmentFormat(_ctx->depthImage.format);
-        _ctx->meshPipeline = pipelineBuilder.build(_ctx->device, _ctx->allocator);
-
-
-        // ------------------------ CLEANUP ------------------------
-        vkDestroyShaderModule(_ctx->device, vertexShader, _ctx->allocator);
-        vkDestroyShaderModule(_ctx->device, fragmentShader, _ctx->allocator);
-
-        _ctx->mainDeletionQueue.push([&] {
-            vkDestroyPipelineLayout(_ctx->device, _ctx->meshPipelineLayout, _ctx->allocator);
-            vkDestroyPipeline(_ctx->device, _ctx->meshPipeline, _ctx->allocator);
         });
     }
 
@@ -1130,18 +1063,7 @@ namespace ephemeral
 
     void EphemeralEngine::initDefaultData() noexcept
     {
-        // TEST MESH
-        _ctx->testMeshes = loadGltfMeshes(*this, "assets/basicmesh.glb").value();
-
-        _ctx->mainDeletionQueue.push([&] {
-            for (auto&& mesh : _ctx->testMeshes)
-            {
-                destroyBuffer(_ctx->vma, mesh->meshBuffers.indexBuffer);
-                destroyBuffer(_ctx->vma, mesh->meshBuffers.vertexBuffer);
-            }
-        });
-
-        // TEST TEXTURES
+        // DEBUG TEXTURES
         // ------------------------ CREATE COLORS ------------------------
         const uint32_t white   = packUnorm4x8(flcn::Vec4F::one());
         const uint32_t black   = packUnorm4x8(flcn::Vec4F{ 0.0f, 0.0f, 0.0f, 1.0f });
@@ -1222,22 +1144,6 @@ namespace ephemeral
             destroyImage(_ctx->device, _ctx->allocator, _ctx->blackImage, _ctx->vma);
             destroyImage(_ctx->device, _ctx->allocator, _ctx->whiteImage, _ctx->vma);
         });
-
-        // ------------------------ TEST DATA ------------------------
-        for (const auto& mesh : _ctx->testMeshes)
-        {
-            auto meshNode  = std::make_shared<MeshNode>();
-            meshNode->mesh = mesh;
-
-            meshNode->localTransform = flcn::Mat4F::identity();
-            meshNode->worldTransform = flcn::Mat4F::identity();
-
-            for (auto& surface : meshNode->mesh->surfaces)
-            {
-                surface.material              = std::make_shared<GLTFMaterial>(_ctx->defaultData);
-                _ctx->loadedNodes[mesh->name] = std::move(meshNode);
-            }
-        }
     }
 
 
@@ -1314,24 +1220,7 @@ namespace ephemeral
         _ctx->mainDrawContext.opaqueObjects.clear();
         _ctx->mainDrawContext.transparentObjects.clear();
 
-        for (int x = -3; x < 3; ++x)
-        {
-            flcn::Mat4F scale       = flcn::Mat4F::makeScale(0.4f);
-            flcn::Mat4F translation = flcn::Mat4F::identity();
-            translation(0, 3)       = static_cast<float>(x);
-            translation(1, 3)       = 1;
-
-            _ctx->loadedNodes["Cube"]->draw(translation * scale, _ctx->mainDrawContext);
-        }
-
-        _ctx->loadedNodes["Suzanne"]->draw(flcn::Mat4F::identity(), _ctx->mainDrawContext);
-
-
-
-        // flcn::Mat4F view = flcn::Mat4F::identity();
-        // view(2, 3)       = -3;
-        // float fov         = std::numbers::pi / 4; // 45deg
-        float fov            = 1.22173f; // 70deg
+        constexpr float fov            = 1.22173f; // 70deg
         _ctx->sceneData.view = cam.getViewMatrix();
         _ctx->sceneData.proj = makePersp(
             static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), fov, 0.1f, 10000.0f);

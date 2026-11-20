@@ -23,7 +23,7 @@ namespace ephemeral
 {
     // Config variables
     static constexpr auto ENGINE_NAME               = "Ephemeral";
-    static constexpr bool VALIDATION_LAYERS_ENABLED = false;
+    static constexpr bool VALIDATION_LAYERS_ENABLED = true;
     static constexpr bool ENABLE_MESH_SORT = false;
     static constexpr size_t FRAME_OVERLAP = 2; // Triple buffering
 
@@ -108,13 +108,10 @@ namespace ephemeral
         VkDescriptorSet drawImageDescriptorSet;
         VkDescriptorSetLayout drawImageDescriptorSetLayout;
         VkDescriptorSetLayout sceneDescriptorSetLayout;
-        VkDescriptorSetLayout singleImageDescriptorLayout;
 
         // ------------------------ PIPELINES ------------------------
         VkPipelineLayout gradientPipelineLayout;
         VkPipeline gradientPipeline;
-        VkPipelineLayout meshPipelineLayout;
-        VkPipeline meshPipeline;
 
         // ------------------------ IMMEDIATE SUBMITS ------------------------
         VkFence immFence;
@@ -132,7 +129,6 @@ namespace ephemeral
         // ------------------------ DATA ------------------------
         std::vector<ComputeEffect> bgEffects{};
         int currentBgEffect{ 0 };
-        std::vector<std::shared_ptr<MeshAsset>> testMeshes;
         GPUSceneData sceneData;
         VulkanImage whiteImage, blackImage, grayImage, errorCheckerBoardImage;
         VkSampler defaultSamplerLinear, defaultSamplerNearest;
@@ -140,7 +136,6 @@ namespace ephemeral
         MaterialInstance defaultData;
         GLTFMetallicRoughness metalRoughMaterial;
         DrawContext mainDrawContext;
-        std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes; // Deprecated
         std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
 
         Camera mainCamera;
