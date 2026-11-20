@@ -157,16 +157,39 @@ namespace ephemeral
 
 
         // ------------------------ RENDER ------------------------
+        MaterialPipeline* lastPipeline = nullptr;
+        MaterialInstance* lastMaterial = nullptr;
+        VkBuffer lastIndexBuffer       = VK_NULL_HANDLE;
+
         const auto draw = [&](const RenderObject& object) {
-            vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline->pipeline);
-            vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    object.material->pipeline->pipelineLayout, 0, 1, &globalDescriptor, 0, nullptr);
-            vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    object.material->pipeline->pipelineLayout, 1, 1, &object.material->materialSet, 0,
-                                    nullptr);
+            if (object.material != lastMaterial)
+            {
+                lastMaterial = object.material;
 
-            vkCmdBindIndexBuffer(cmdBuffer, object.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+                // Rebind pipeline and descriptors if material changed
+                if (object.material->pipeline != lastPipeline)
+                {
+                    lastPipeline = object.material->pipeline;
+                    vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline->pipeline);
+                    vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                            object.material->pipeline->pipelineLayout, 0, 1, &globalDescriptor, 0,
+                                            nullptr);
 
+                    vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+                    vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
+                }
+                vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        object.material->pipeline->pipelineLayout, 1, 1, &object.material->materialSet,
+                                        0, nullptr);
+            }
+
+            // Rebind index buffer if it has already changed
+            if (lastIndexBuffer != object.indexBuffer)
+            {
+                vkCmdBindIndexBuffer(cmdBuffer, object.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            }
+
+            // Push constants
             const GPUDrawPushConstants pc{ .worldMatrix  = object.transform,
                                            .vertexBuffer = object.vertexBufferAddress };
             vkCmdPushConstants(cmdBuffer, object.material->pipeline->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
@@ -276,7 +299,7 @@ namespace ephemeral
         initDefaultData();
 
         _ctx->mainCamera.velocity = flcn::Vec3F::zero();
-        _ctx->mainCamera.position = flcn::Vec3F(30.0f, 0.0f, -0.85f);
+        _ctx->mainCamera.position = flcn::Vec3F(30.0f, 0.0f, -4.5f);
         _ctx->mainCamera.pitch    = 0;
         _ctx->mainCamera.yaw      = 0;
 
